@@ -22,8 +22,8 @@ Infastructure,Supply,Network tower / mobile coverage footprint,,,,,,,
 Infastructure,Access,% households with access to safe/improved water source,LCMS / Census,,ZamStats / NWASCO,,,,
 Infastructure,Access,Distance/time to nearest water point,Facility GIS mapping / DWASHE,,Ministry of Water Development,,,,
 Infastructure,Access,% households electrified / new connections,ZESCO administrative records,,Ministry of Energy / ZESCO,,,,
-Environment,N/A,Population Growth Rate,,,,,,,
-Environment,N/A,Forest cover (greenery index),,,,,,,
-Environment,N/A,Cattlehead per capita,Livestock census,,,,,,
-Environment,N/A,charcoal consumption domestic ,,,,,,,
-Environment,N/A,Ecological Diversity? ,,,,,,,
+Environment,N/A,Population Growth Rate,,,,,,,Pressure indicator — invert before min-max normalisation (higher raw value = lower capacity). See ADR-0009.
+Environment,N/A,Forest cover (greenery index),,,,,,,Condition indicator — orient as-is (higher = higher capacity). See ADR-0009.
+Environment,N/A,Cattlehead per capita,Livestock census,,,,,,Pressure indicator — invert before min-max normalisation (higher raw value = lower capacity). See ADR-0009.
+Environment,N/A,charcoal consumption domestic ,,,,,,,Pressure indicator — invert before min-max normalisation (higher raw value = lower capacity). See ADR-0009.
+Environment,N/A,Ecological Diversity? ,,,,,,,Condition indicator — orient as-is (higher = higher capacity). See ADR-0009.
