@@ -1,0 +1,57 @@
+name: Publish data submission
+
+# Manually triggered only (ADR-0012) — a data promotion is a deliberate act
+# by whoever loaded the new file, not something that runs on a schedule or
+# webhook.
+on:
+  workflow_dispatch:
+    inputs:
+      file_path:
+        description: Path to the raw Excel/CSV file within this repo checkout
+        required: true
+      sector:
+        description: Sector this submission belongs to (e.g. Health)
+        required: true
+      submitter:
+        description: Who is submitting this file
+        required: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: CarryingCapacityDashboard
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -e .
+
+      - name: Run the unit test suite
+        # ADR-0012: a validation pipeline run re-checks the unit test suite,
+        # not just this submission's data -- a broken scoring/validation
+        # change must not be able to publish new data.
+        run: pytest
+
+      - name: Run validation and publish pipeline
+        env:
+          CCA_DATABASE_URL: ${{ secrets.CCA_DATABASE_URL }}
+        run: >
+          python scripts/run_pipeline.py
+          --file "${{ github.event.inputs.file_path }}"
+          --sector "${{ github.event.inputs.sector }}"
+          --submitter "${{ github.event.inputs.submitter }}"
+
+      - name: Commit the validation report and raw file
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/raw docs/validation-reports
+          git diff --cached --quiet || git commit -m "Data submission: ${{ github.event.inputs.sector }} from ${{ github.event.inputs.submitter }}"
+          git push
