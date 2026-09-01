@@ -43,6 +43,7 @@ htmlcov/
 .coverage
 .coverage.*
 .cache
+scripts/.grid3_districts_cache.json
 nosetests.xml
 coverage.xml
 *.cover

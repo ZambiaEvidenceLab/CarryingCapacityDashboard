@@ -4,12 +4,44 @@
 
 **Blocked by:** 02 — Scoring engine
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `indicators` schema stores cleaned, normalised indicator values per district per indicator per run, with a `sector` column
-- [ ] `indices` schema stores precomputed Sector Index and Dimension scores per district per run
-- [ ] `metadata` schema stores indicator definitions, reference years, and data-source attribution
-- [ ] Catalog table stores one row per raw submission: file location, submitter, timestamp, status, validation report summary
-- [ ] Write functions accept scoring engine output and persist it as a new timestamped run (append-only)
-- [ ] Read functions serve the dashboard's needs: latest-run scores by sector, per-district decomposition, national summary stats
-- [ ] Round-trip verified: scoring engine output written and read back matches
+- [x] `indicators` schema stores cleaned, normalised indicator values per district per indicator per run, with a `sector` column
+- [x] `indices` schema stores precomputed Sector Index and Dimension scores per district per run
+- [x] `metadata` schema stores indicator definitions, reference years, and data-source attribution
+- [x] Catalog table stores one row per raw submission: file location, submitter, timestamp, status, validation report summary
+- [x] Write functions accept scoring engine output and persist it as a new timestamped run (append-only)
+- [x] Read functions serve the dashboard's needs: latest-run scores by sector, per-district decomposition, national summary stats
+- [x] Round-trip verified: scoring engine output written and read back matches
+
+## Comments
+
+Implemented in `src/cca/storage/`:
+- `schema.py` — SQLAlchemy Core tables under four real Postgres schemas: `indices.runs` (one row per pipeline run, exactly one `is_current`) + `indices.scores` (Dimension and Sector Index rows, `dimension IS NULL` marking a Sector Index row); `indicators.indicator_values` (normalised values per district per indicator per run — a missing indicator for a district simply has no row, per ADR-0007/ADR-0008's "dropped, not imputed"); `metadata.indicator_definitions` (the indicator catalog: sector, dimension, orientation, reference year, data source — upserted in place, not part of ADR-0014's append-only guarantee since it describes the catalog, not a scored run); `catalog.submissions` (ADR-0012/ADR-0016). `create_all(engine)` creates the schemas and tables.
+- `io.py` — `write_scoring_run` persists a `ScoringResult` as a new current run and flips every prior run to `is_current = false` (ADR-0014); `write_indicator_metadata` upserts the catalog; `read_latest_sector_scores` / `read_district_decomposition` / `read_national_summary` serve the dashboard's three read needs; `write_submission` / `update_submission_status` cover the raw-submission catalog (ADR-0012).
+- Added `sqlalchemy` and `psycopg[binary]` to `pyproject.toml`.
+
+**Read-only vs. data-loading credentials** (spec: "the dashboard app has read-only access; data loading uses a separate credential"): not enforced by creating separate Postgres roles here — that's a production provisioning decision (ADR-0012 already flags DB hosting/network access as an open MoFNP workshop question). Architecturally it's supported: every function takes a caller-supplied `Engine`, and read functions never write, so the dashboard and the pipeline can be wired to different credentials without any code change.
+
+**Local dev/test database**: created role `cca_dev` (password `cca_dev_local_only` — a local-only, non-secret dev credential, not the Postgres installation's own superuser password) owning two databases, `cca_dev` and `cca_test`, on the developer's local Postgres 18 instance (README: "For now, the PostgreSQL database itself runs locally on the developer's laptop"). Tests in `tests/test_storage.py` use a `pg_engine`/`clean_pg` fixture (`tests/conftest.py`) that connects to `CCA_TEST_DATABASE_URL` (defaulting to `cca_test` above) and skips cleanly if nothing is reachable, so the storage-adapter tests don't force Postgres on every environment.
+
+Tests in `tests/test_storage.py` (12 cases) are deliberately light integration-level tests per the spec's testing philosophy ("adapters get light integration-level tests only... do not duplicate the scoring engine's coverage at the adapter boundary") — small in-code fixtures (3 districts, 3 indicators, one deliberately missing value), not the full 116×29 synthetic dataset. Covers: schema/table creation, the round-trip at all three levels (Sector Index, Dimension, and normalised Indicator values — `ScoringResult` written then read back matches numerically), a failed-validation run being rejected, a new run superseding the previous `is_current` run, missing indicator values genuinely absent from the table, the database itself rejecting a second `is_current` row, both read functions, metadata upsert, and the submission catalog. Full repo suite: 53 passed.
+
+`/code-review` (Standards + Spec axes) findings and how they were handled:
+- **Fixed (real bug)** — nothing structurally enforced "exactly one current run"; `schema.py`'s own docstring claimed it but a concurrent write (or any future raw-SQL path) could leave two rows `is_current = true`. Added a Postgres partial unique index (`uq_indices_runs_single_current`) so the database itself rejects a second one — verified by `test_the_database_rejects_a_second_row_marked_current`.
+- **Fixed (real gap)** — the round-trip test only checked `sector_scores`; `dimension_scores` and normalised indicator values were never asserted numerically. Added `test_round_trips_dimension_scores_through_a_write_and_read` and `test_round_trips_normalised_indicator_values_through_a_write_and_read`.
+- **Fixed (real gap, ADR-0015)** — the catalog only held a free-text `validation_report_summary`, but ADR-0015 wants the entry to reference the versioned report committed to the repo (GitHub Actions log retention isn't permanent). Added a `validation_report_path` column and threaded it through `write_submission`/`update_submission_status`.
+- **Fixed (Standards, DRY)** — the `JOIN indices.runs r ON r.run_id = ... WHERE r.is_current = true` fragment was repeated near-verbatim across three read functions; extracted to a shared `_CURRENT_RUN_JOIN` format string in `io.py`.
+- **Noted, not fixed (out of scope for this ticket)** — no data source yet for the dashboard's "urban annotation" user story (mostly-urban districts explaining low Agriculture scores); not one of this ticket's three read needs (latest-run scores by sector, per-district decomposition, national summary), so left for whichever ticket builds that dashboard feature.
+- **Noted, not fixed (deliberate)** — table/column names exist twice with nothing linking `schema.py`'s `Table` objects to the string literals in `io.py`'s raw SQL, so a rename would need touching both with nothing to catch a missed spot. Left as-is: deriving the SQL from the `Table` objects would mean rewriting every read query in SQLAlchemy Core's query-builder API, a larger change than this ticket's scope warrants for a codebase of this size.
+
+## Addendum: schema review before other code depends on it
+
+Before wiring anything else to this schema, did a deliberate design review (not tied to a specific finding — user-requested "make sure the schema is best possible"). Surfaced two real gaps and two judgement calls; user chose to fix the first:
+
+- **Fixed** — no district master-list table existed, so every `district_code` on `indices.scores`/`indicators.indicator_values` was a bare string with no DB-level check it's a real GRID3 district (ADR-0007's closed-cohort rule was only enforced in the scoring engine's own `validate_full_cohort`, at write time, in application code). Added `metadata.districts` (district_code, name, province, province_code, is_urban), populated from the GRID3 client via `write_district_master_list` (must run before `write_scoring_run`), and foreign-keyed both `district_code` columns to it — `test_a_score_for_a_district_outside_the_master_list_is_rejected_by_the_database` verifies the database itself now rejects it. This table also gives the dashboard's "Urban annotation" user story (mostly-urban districts explaining low Agriculture scores) a real data source via the new `is_urban` column and `read_districts` — `urban_district_names` is caller-supplied since GRID3 doesn't classify urban/rural itself.
+- **Deferred, user's call** — `metadata.indicator_definitions` is mutably upserted while `indices`/`indicators` rows are append-only history (ADR-0014); joining an old run to today's metadata can retroactively show a corrected reference year/data source as if it always applied. Not fixed in this pass.
+- **Deferred, user's call** — `indices.scores` conflates Sector Index and Dimension rows via a nullable `dimension` column (`IS NULL`/`IS NOT NULL` filtering scattered through every read query) rather than two separate tables mirroring the scoring engine's own `dimension_scores`/`sector_scores` DataFrames. Not fixed in this pass.
+- **Deferred, user's call** — no `CHECK` constraints on `status`/`orientation`/`dimension`; valid values are enforced only in Python.
+
+Tests in `tests/test_storage.py` grew to 15 cases: a `pg` fixture now seeds the district master list before any test that writes scores (required by the new FK), plus a `TestDistrictMasterList` class covering write/read round-trip, upsert-not-duplicate, and the FK rejection. Full repo suite: 56 passed.
