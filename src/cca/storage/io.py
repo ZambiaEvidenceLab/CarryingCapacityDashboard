@@ -223,6 +223,22 @@ def read_national_summary(engine: Engine, sector: str) -> dict[str, float | int 
     return dict(row)
 
 
+def read_indicator_catalog(engine: Engine) -> pd.DataFrame:
+    """The indicator catalog (sector, dimension, orientation, reference year, source).
+
+    Used by the dashboard's Methodology FAQ (ADR-0010) — not tied to any one
+    district or run, since it describes the catalog itself.
+    """
+    with engine.connect() as conn:
+        return pd.read_sql(
+            text(
+                "SELECT indicator_id, sector, dimension, orientation, reference_year, data_source "
+                "FROM metadata.indicator_definitions"
+            ),
+            conn,
+        )
+
+
 def write_submission(
     engine: Engine,
     *,

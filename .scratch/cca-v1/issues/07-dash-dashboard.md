@@ -14,13 +14,34 @@
 
 **Blocked by:** 03 — GRID3 client, 05 — Postgres schema and data I/O
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Landing page shows a sector-selectable choropleth map of 116 districts, shaded by Sector Index
-- [ ] National summary strip displays average score, spread, and data-completeness count for the selected sector
-- [ ] Clicking a district opens a radar chart of its five Sector Index scores against the national average
-- [ ] Clicking a radar axis opens the Decomposition View showing Dimension and Indicator scores with reference years
-- [ ] Data-completeness flags are visible where a score was computed from incomplete Indicators
-- [ ] Urban districts display an annotation explaining lower Agriculture scores
-- [ ] Methodology FAQ is present at the bottom of the page
-- [ ] The app performs no calculation — all scores are read from the processed Postgres layer
+- [x] Landing page shows a sector-selectable choropleth map of 116 districts, shaded by Sector Index
+- [x] National summary strip displays average score, spread, and data-completeness count for the selected sector
+- [x] Clicking a district opens a radar chart of its five Sector Index scores against the national average
+- [x] Clicking a radar axis opens the Decomposition View showing Dimension and Indicator scores with reference years
+- [x] Data-completeness flags are visible where a score was computed from incomplete Indicators
+- [x] Urban districts display an annotation explaining lower Agriculture scores
+- [x] Methodology FAQ is present at the bottom of the page
+- [x] The app performs no calculation — all scores are read from the processed Postgres layer
+
+## Comments
+
+Implemented as `src/cca/dashboard/` (`data.py` pure shaping helpers, `faq.py`
+static + catalog-driven FAQ content, `layout.py` static component tree,
+`callbacks.py` read-and-shape callback logic, `app.py` factory) plus
+`scripts/run_dashboard.py` as the entrypoint (reads `CCA_DATABASE_URL` /
+`CCA_GRID3_CACHE_PATH`, matching `run_pipeline.py`'s convention). Added
+`read_indicator_catalog` to `storage/io.py` for the FAQ's per-indicator table.
+
+Verified against real GRID3 data (116 districts) and a synthetic scoring run
+seeded into the local Postgres: map renders all 116 districts, district
+click produces a correct radar chart (district vs. national average) with
+the Urban annotation firing for Lusaka, and drilling into an axis shows the
+right Dimension/Indicator breakdown including a real dropped-not-imputed
+missing indicator. Test DB was truncated afterwards.
+
+Tests: `tests/test_dashboard_data.py` (pure shaping logic, no DB) and
+`tests/test_dashboard_app.py` (light Postgres-backed integration, per the
+spec's testing decision not to duplicate scoring-engine coverage at the
+adapter boundary). Full suite: 94 passed.

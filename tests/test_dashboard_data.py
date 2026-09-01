@@ -1,0 +1,143 @@
+import pandas as pd
+
+from cca.dashboard.data import (
+    URBAN_AGRICULTURE_ANNOTATION,
+    build_district_geojson,
+    is_urban_district,
+    shape_decomposition,
+    shape_map_data,
+    shape_national_summary,
+    shape_radar_data,
+)
+from cca.grid3.client import District
+
+DISTRICTS_DF = pd.DataFrame(
+    [
+        {"district_code": "D1", "name": "D1 Town", "is_urban": False},
+        {"district_code": "D2", "name": "D2 City", "is_urban": True},
+    ]
+)
+
+
+class TestBuildDistrictGeojson:
+    def test_keys_each_feature_by_district_code(self):
+        districts = [
+            District(code="D1", name="D1 Town", province="P1", province_code="PC1", geometry={"type": "Polygon"}),
+        ]
+
+        geojson = build_district_geojson(districts)
+
+        assert geojson["type"] == "FeatureCollection"
+        feature = geojson["features"][0]
+        assert feature["id"] == "D1"
+        assert feature["geometry"] == {"type": "Polygon"}
+        assert feature["properties"]["name"] == "D1 Town"
+
+
+class TestShapeMapData:
+    def test_merges_scores_with_district_names_and_urban_flag(self):
+        scores = pd.DataFrame([{"district_code": "D1", "sector": "Health", "score": 42.0, "complete": True}])
+
+        merged = shape_map_data(scores, DISTRICTS_DF).set_index("district_code")
+
+        assert merged.loc["D1", "name"] == "D1 Town"
+        assert bool(merged.loc["D1", "is_urban"]) is False
+        assert merged.loc["D1", "completeness_label"] == "Complete"
+
+    def test_a_district_with_no_scored_row_yet_still_appears_on_the_map(self):
+        scores = pd.DataFrame([{"district_code": "D1", "sector": "Health", "score": 42.0, "complete": True}])
+
+        merged = shape_map_data(scores, DISTRICTS_DF).set_index("district_code")
+
+        assert pd.isna(merged.loc["D2", "score"])
+        assert merged.loc["D2", "completeness_label"] == "Incomplete data"
+
+
+class TestShapeNationalSummary:
+    def test_rounds_present_values(self):
+        summary = shape_national_summary({"average": 42.345, "spread": 5.678, "incomplete_count": 3})
+
+        assert summary == {"average": 42.3, "spread": 5.7, "incomplete_count": 3}
+
+    def test_handles_an_empty_run_with_no_scores(self):
+        summary = shape_national_summary({"average": None, "spread": None, "incomplete_count": 0})
+
+        assert summary == {"average": None, "spread": None, "incomplete_count": 0}
+
+
+class TestShapeRadarData:
+    ALL_SCORES = pd.DataFrame(
+        [
+            {"district_code": "D1", "sector": "Health", "score": 80.0, "complete": True},
+            {"district_code": "D2", "sector": "Health", "score": 40.0, "complete": True},
+            {"district_code": "D1", "sector": "Education", "score": 60.0, "complete": False},
+        ]
+    )
+
+    def test_aligns_district_and_national_average_scores_to_the_sector_axis_order(self):
+        radar = shape_radar_data("D1", self.ALL_SCORES, ["Health", "Education", "Environment"])
+
+        assert radar["sectors"] == ["Health", "Education", "Environment"]
+        assert radar["district_scores"] == [80.0, 60.0, None]
+        assert radar["national_average_scores"] == [60.0, 60.0, None]
+
+    def test_flags_a_dimension_computed_from_incomplete_indicators(self):
+        radar = shape_radar_data("D1", self.ALL_SCORES, ["Health", "Education"])
+
+        assert radar["district_complete"] == [True, False]
+
+    def test_a_district_missing_from_a_sector_entirely_shows_none_not_a_dropped_axis(self):
+        radar = shape_radar_data("D2", self.ALL_SCORES, ["Health", "Education"])
+
+        assert radar["district_scores"] == [40.0, None]
+        assert radar["district_complete"] == [True, False]
+
+
+class TestShapeDecomposition:
+    def test_environment_has_no_dimension_rows_only_indicator_rows(self):
+        breakdown = {
+            "dimensions": pd.DataFrame(columns=["dimension", "score", "complete"]),
+            "indicator_values": pd.DataFrame(
+                [{"indicator_id": "environment_forest_cover", "value": 70.0, "reference_year": 2022}]
+            ),
+        }
+
+        shaped = shape_decomposition("D1", "Environment", breakdown)
+
+        assert shaped["dimensions"] == []
+        assert shaped["indicators"] == [
+            {"indicator_id": "environment_forest_cover", "value": 70.0, "reference_year": 2022}
+        ]
+
+    def test_a_supply_access_sector_returns_both_dimension_and_indicator_rows(self):
+        breakdown = {
+            "dimensions": pd.DataFrame(
+                [
+                    {"dimension": "Supply", "score": 50.0, "complete": True},
+                    {"dimension": "Access", "score": 30.0, "complete": True},
+                ]
+            ),
+            "indicator_values": pd.DataFrame(
+                [{"indicator_id": "health_doctor_to_population_ratio", "value": 50.0, "reference_year": 2021}]
+            ),
+        }
+
+        shaped = shape_decomposition("D1", "Health", breakdown)
+
+        assert len(shaped["dimensions"]) == 2
+        assert len(shaped["indicators"]) == 1
+
+
+class TestIsUrbanDistrict:
+    def test_true_for_a_flagged_district(self):
+        assert is_urban_district(DISTRICTS_DF, "D2") is True
+
+    def test_false_for_an_unflagged_district(self):
+        assert is_urban_district(DISTRICTS_DF, "D1") is False
+
+    def test_false_for_a_district_not_in_the_master_list(self):
+        assert is_urban_district(DISTRICTS_DF, "UNKNOWN") is False
+
+
+def test_urban_annotation_text_mentions_agriculture():
+    assert "Agriculture" in URBAN_AGRICULTURE_ANNOTATION
