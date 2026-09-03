@@ -61,6 +61,16 @@ class TestShapeMapData:
         merged = shape_map_data(scores, DISTRICTS_DF).set_index("district_code")
 
         assert pd.isna(merged.loc["D2", "score"])
+        assert merged.loc["D2", "completeness_label"] == "No data"
+
+    def test_an_incomplete_district_with_a_score_says_incomplete_data(self):
+        scores = pd.DataFrame([
+            {"district_code": "D1", "sector": "Health", "score": 42.0, "complete": True},
+            {"district_code": "D2", "sector": "Health", "score": 30.0, "complete": False},
+        ])
+
+        merged = shape_map_data(scores, DISTRICTS_DF).set_index("district_code")
+
         assert merged.loc["D2", "completeness_label"] == "Incomplete data"
 
 

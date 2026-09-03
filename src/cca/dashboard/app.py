@@ -45,11 +45,10 @@ def build_app(engine: Engine, districts: list[District]) -> Dash:
     districts_df = read_districts(engine)
     geojson = build_district_geojson(districts)
     district_points = build_district_points(districts)
+    data_available = not districts_df.empty
 
-    # Ranked-list rows are created inside a callback, not the static layout, so
-    # their pattern-matching `n_clicks` Inputs aren't present at startup.
     app = Dash(__name__, suppress_callback_exceptions=True)
     app.index_string = app.index_string.replace("</head>", _ROW_CSS)
-    app.layout = build_layout(SECTORS)
+    app.layout = build_layout(SECTORS, data_available=data_available)
     register_callbacks(app, engine, districts_df, geojson, district_points, SECTORS)
     return app

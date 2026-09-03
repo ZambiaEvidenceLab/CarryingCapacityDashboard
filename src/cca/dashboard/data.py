@@ -150,7 +150,10 @@ def shape_map_data(sector_scores: pd.DataFrame, districts: pd.DataFrame) -> pd.D
         sector_scores, on="district_code", how="left"
     )
     merged["complete"] = merged["complete"].fillna(False)
-    merged["completeness_label"] = merged["complete"].map({True: "Complete", False: "Incomplete data"})
+    merged["completeness_label"] = merged.apply(
+        lambda r: "No data" if pd.isna(r["score"]) else ("Complete" if r["complete"] else "Incomplete data"),
+        axis=1,
+    )
     return merged
 
 

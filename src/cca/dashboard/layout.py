@@ -11,6 +11,44 @@ import dash_mantine_components as dmc
 from dash import dcc
 
 from cca.dashboard.data import MEASURES, OVERALL
+from cca.dashboard.faq import GENERAL_FAQ
+
+METHODOLOGY_DRAWER = dmc.Drawer(
+    id="methodology-drawer",
+    position="right",
+    size="md",
+    padding="md",
+    opened=False,
+    title=dmc.Text("Methodology", fw=700),
+    children=dmc.Stack(
+        gap="md",
+        children=[
+            *[
+                dmc.Stack(
+                    gap=4,
+                    children=[
+                        dmc.Text(question, fw=600, size="sm"),
+                        dmc.Text(answer, size="sm", c="dimmed"),
+                    ],
+                )
+                for question, answer in GENERAL_FAQ
+            ],
+            dmc.Alert(
+                "Min-max normalisation pins the lowest district to 0 and the highest to 100 "
+                "— the mean sits wherever the distribution's mass is. Averaging several 0–100 "
+                "Indicators into a Sector Index also pulls the spread toward the middle.",
+                color="gray",
+                variant="light",
+                title="Why isn't the national average 50?",
+            ),
+            dmc.Text(
+                "The five Sector Indices are never combined into a single composite score (ADR-0002).",
+                size="sm",
+                fw=500,
+            ),
+        ],
+    ),
+)
 
 RANKED_LIST_PANEL = dmc.Paper(
     withBorder=True,
@@ -34,7 +72,7 @@ RANKED_LIST_PANEL = dmc.Paper(
 )
 
 
-def build_layout(sectors: list[str]) -> dmc.MantineProvider:
+def build_layout(sectors: list[str], *, data_available: bool = True) -> dmc.MantineProvider:
     sector_select = dmc.Select(
         id="sector-select",
         label="Sector",
@@ -116,7 +154,20 @@ def build_layout(sectors: list[str]) -> dmc.MantineProvider:
         forceColorScheme="light",
         children=[
           dcc.Store(id="selected-district"),
+          dcc.Store(id="intro-dismissed", storage_type="local"),
           detail_drawer,
+          METHODOLOGY_DRAWER,
+          dmc.Box(
+              id="data-unavailable-banner",
+              style={} if not data_available else {"display": "none"},
+              children=dmc.Alert(
+                  "Data is currently unavailable. Please try again later or contact your administrator.",
+                  title="Data unavailable",
+                  color="red",
+                  variant="filled",
+                  m="md",
+              ),
+          ),
           dmc.AppShell(
             header={"height": 68},
             padding="md",
@@ -142,19 +193,67 @@ def build_layout(sectors: list[str]) -> dmc.MantineProvider:
                 dmc.AppShellMain(
                     children=[
                         dmc.Group(align="flex-end", gap="lg", children=[sector_select, measure_control]),
+                        dmc.Box(
+                            id="intro-card-container",
+                            mt="sm",
+                            mb="sm",
+                            children=dmc.Paper(
+                                withBorder=True,
+                                radius="md",
+                                p="sm",
+                                style={"backgroundColor": "var(--mantine-color-blue-0)"},
+                                children=dmc.Group(
+                                    justify="space-between",
+                                    align="flex-start",
+                                    wrap="nowrap",
+                                    children=[
+                                        dmc.Stack(
+                                            gap=4,
+                                            children=[
+                                                dmc.Text("Getting started", fw=600, size="sm"),
+                                                dmc.Text(
+                                                    "Scan the map to spot geographic patterns, "
+                                                    "check the ranked list for the most underserved "
+                                                    "districts, then click a district to drill into "
+                                                    "its Sector breakdown.",
+                                                    size="sm",
+                                                    c="dimmed",
+                                                ),
+                                            ],
+                                        ),
+                                        dmc.ActionIcon(
+                                            dmc.Text("✕", size="sm"),
+                                            id="dismiss-intro",
+                                            variant="subtle",
+                                            color="gray",
+                                            size="sm",
+                                        ),
+                                    ],
+                                ),
+                            ),
+                        ),
                         dmc.Grid(
                             gutter="md",
                             mt="md",
                             children=[
                                 dmc.GridCol(
                                     span=8,
-                                    children=dcc.Graph(
-                                        id="map-graph",
-                                        style={"height": "620px"},
-                                        config={"displayModeBar": False},
+                                    children=dcc.Loading(
+                                        type="circle",
+                                        children=dcc.Graph(
+                                            id="map-graph",
+                                            style={"height": "620px"},
+                                            config={"displayModeBar": False},
+                                        ),
                                     ),
                                 ),
-                                dmc.GridCol(span=4, children=RANKED_LIST_PANEL),
+                                dmc.GridCol(
+                                    span=4,
+                                    children=dcc.Loading(
+                                        type="circle",
+                                        children=RANKED_LIST_PANEL,
+                                    ),
+                                ),
                             ],
                         ),
                     ]

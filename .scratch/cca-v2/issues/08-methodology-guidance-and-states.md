@@ -16,19 +16,19 @@ and the header-link wiring are new work.
 **Blocked by:** 03 (shell), 06 (decomposition, for the contextual per-Indicator
 detail).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] A header "Methodology" link opens a drawer covering general methodology,
+- [x] A header "Methodology" link opens a drawer covering general methodology,
       including the average-≠-50 explanation and the no-composite-score rule
       (ADR-0002).
-- [ ] Per-Indicator methodology (what it is, reference year, data source) is
+- [x] Per-Indicator methodology (what it is, reference year, data source) is
       available contextually within the Decomposition View, not only in the
       Methodology drawer.
-- [ ] A dynamic one-line subtitle reflects the current Sector and measure and
+- [x] A dynamic one-line subtitle reflects the current Sector and measure and
       states the colour direction/range.
-- [ ] A single dismissible intro card appears on first visit (scan → rank →
+- [x] A single dismissible intro card appears on first visit (scan → rank →
       drill) and does not reappear once dismissed; no stepped guided tour.
-- [ ] Explicit states: data-unavailable banner when the processed layer can't be
+- [x] Explicit states: data-unavailable banner when the processed layer can't be
       read; a District with no score reads clearly as "No data" (map + list); a
       loading affordance shows while callbacks resolve.
-- [ ] All labels use the domain glossary vocabulary (CONTEXT.md).
+- [x] All labels use the domain glossary vocabulary (CONTEXT.md).

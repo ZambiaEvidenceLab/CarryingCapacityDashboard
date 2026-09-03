@@ -512,19 +512,34 @@ def _indicator_card(row: dict, compare_figure: go.Figure | None):
         dmc.Badge(dimension, size="xs", variant="outline", color="gray") if pd.notna(dimension) else None
     )
     meta_line = _indicator_meta_line(row)
+    info_icon = (
+        dmc.HoverCard(
+            withArrow=True,
+            width=280,
+            shadow="md",
+            children=[
+                dmc.HoverCardTarget(
+                    dmc.Text("ⓘ", size="xs", c="blue", style={"cursor": "help"}),
+                ),
+                dmc.HoverCardDropdown(
+                    dmc.Text(meta_line, size="sm"),
+                ),
+            ],
+        )
+        if meta_line
+        else None
+    )
     header = dmc.Group(
         justify="space-between",
         align="flex-start",
         wrap="nowrap",
         children=[
-            dmc.Stack(
-                gap=2,
+            dmc.Group(
+                gap="xs",
                 children=[
-                    dmc.Group(
-                        gap="xs",
-                        children=[dmc.Text(indicator_label(row["indicator_id"]), fw=600, size="sm"), dim_badge],
-                    ),
-                    dmc.Text(meta_line, size="xs", c="dimmed") if meta_line else None,
+                    dmc.Text(indicator_label(row["indicator_id"]), fw=600, size="sm"),
+                    dim_badge,
+                    info_icon,
                 ],
             ),
             dmc.Stack(
@@ -782,3 +797,28 @@ def register_callbacks(
             raise PreventUpdate
         is_urban = is_urban_district(districts_df, selected_code)
         return compute_decomposition_children(engine, selected_code, sector, is_urban=is_urban)
+
+    @app.callback(
+        Output("methodology-drawer", "opened"),
+        Input("open-methodology", "n_clicks"),
+        prevent_initial_call=True,
+    )
+    def _open_methodology(_n):
+        return True
+
+    @app.callback(
+        Output("intro-dismissed", "data"),
+        Input("dismiss-intro", "n_clicks"),
+        prevent_initial_call=True,
+    )
+    def _dismiss_intro(_n):
+        return True
+
+    @app.callback(
+        Output("intro-card-container", "style"),
+        Input("intro-dismissed", "data"),
+    )
+    def _hide_intro_if_dismissed(dismissed):
+        if dismissed:
+            return {"display": "none"}
+        return {}
