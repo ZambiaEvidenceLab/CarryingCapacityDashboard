@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 
 from cca.dashboard.data import (
     ACCESS,
@@ -12,6 +13,7 @@ from cca.dashboard.data import (
     is_urban_district,
     score_range,
     sector_dimension_indicators,
+    shape_compare_distribution,
     shape_decomposition,
     shape_map_data,
     shape_national_summary,
@@ -234,6 +236,39 @@ class TestShapeDecomposition:
         }
 
         assert shape_decomposition("D1", "Health", breakdown)["sector_complete"] is True
+
+
+class TestShapeCompareDistribution:
+    COHORT = pd.DataFrame(
+        [
+            {"district_code": "D1", "raw_value": 12.0},
+            {"district_code": "D2", "raw_value": 6.0},
+            {"district_code": "D3", "raw_value": 24.0},
+        ]
+    )
+
+    def test_returns_all_present_raw_values_the_selected_value_and_the_mean(self):
+        dist = shape_compare_distribution("D2", self.COHORT)
+
+        assert sorted(dist["values"]) == [6.0, 12.0, 24.0]
+        assert dist["this_value"] == 6.0
+        assert dist["mean"] == pytest.approx(14.0)
+
+    def test_a_district_with_no_value_for_this_indicator_reports_none(self):
+        # D4 isn't in the cohort (dropped, not imputed) — its value is None but
+        # the rest of the distribution (and the mean) is still returned.
+        dist = shape_compare_distribution("D4", self.COHORT)
+
+        assert dist["this_value"] is None
+        assert dist["mean"] == pytest.approx(14.0)
+        assert sorted(dist["values"]) == [6.0, 12.0, 24.0]
+
+    def test_an_empty_cohort_yields_no_values_and_no_mean(self):
+        dist = shape_compare_distribution("D1", pd.DataFrame(columns=["district_code", "raw_value"]))
+
+        assert dist["values"] == []
+        assert dist["this_value"] is None
+        assert dist["mean"] is None
 
 
 class TestIsUrbanDistrict:

@@ -12,8 +12,9 @@ across all five Sectors via a `sector` column, never per-sector tables.
   per run. A missing indicator for a district simply has no row
   (ADR-0007/ADR-0008: dropped, not imputed).
 - `metadata` — `indicator_definitions`: the indicator catalog (sector,
-  dimension, orientation, reference year, data-source attribution, and an
-  optional NDP objective/target in raw units). Not part of ADR-0014's
+  dimension, orientation, reference year, data-source attribution, an
+  optional raw-unit label, and an optional NDP objective/target in raw
+  units). Not part of ADR-0014's
   per-run append-only guarantee — it describes the catalog itself, not a
   scored run, so it's upserted in place.
   `districts`: the GRID3 district master list (ADR-0006), including the
@@ -127,6 +128,11 @@ indicator_definitions = Table(
     Column("orientation", String, nullable=False),
     Column("reference_year", Integer, nullable=True),
     Column("data_source", String, nullable=True),
+    # The raw measure's unit label (e.g. "per 10k", "%", "km"), shown beside
+    # the raw value and on the compare-to-others chart's axis (ticket 07) --
+    # nullable, since not every Indicator has a natural unit and the catalog
+    # may not carry one yet.
+    Column("unit", String, nullable=True),
     # A future NDP target in the Indicator's raw units, drawn as a line on
     # the compare-to-others chart -- nullable, empty until MoFNP supplies
     # values (ADR-0019).

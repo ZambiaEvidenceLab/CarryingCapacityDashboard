@@ -10,6 +10,7 @@ from cca.storage.io import (
     read_indicator_cohort_values,
     read_latest_sector_scores,
     read_national_summary,
+    read_sector_cohort_values,
     update_submission_status,
     write_district_master_list,
     write_indicator_metadata,
@@ -264,6 +265,28 @@ class TestReadFunctions:
 
         assert set(cohort["district_code"]) == {"D1", "D2"}
 
+    def test_sector_cohort_values_returns_every_indicators_raw_values_for_one_sector(self, pg):
+        write_scoring_run(pg, _run(), INDICATOR_METAS)
+
+        cohort = read_sector_cohort_values(pg, "Health")
+
+        # Both Health Indicators, keyed so the decomposition can group by Indicator.
+        assert set(cohort["indicator_id"]) == {
+            "health_doctor_to_population_ratio",
+            "health_distance_to_nearest_facility",
+        }
+        # D1's raw doctor-to-population ratio was submitted as 0.1.
+        doctor = cohort[
+            (cohort["indicator_id"] == "health_doctor_to_population_ratio")
+            & (cohort["district_code"] == "D1")
+        ]
+        assert doctor["raw_value"].iloc[0] == pytest.approx(0.1)
+        # D3's missing Access Indicator is dropped, not imputed — no row.
+        assert not (
+            (cohort["indicator_id"] == "health_distance_to_nearest_facility")
+            & (cohort["district_code"] == "D3")
+        ).any()
+
     def test_national_summary_reflects_the_written_run(self, pg):
         write_scoring_run(pg, _run(), INDICATOR_METAS)
 
@@ -293,6 +316,46 @@ class TestIndicatorMetadata:
 
         assert row["reference_year"] == 2022
         assert row["data_source"] == "Forestry Dept. survey"
+
+    def test_write_indicator_metadata_upserts_a_unit_when_supplied(self, clean_pg):
+        write_indicator_metadata(
+            clean_pg, INDICATOR_METAS, units={"health_doctor_to_population_ratio": "per 10k"}
+        )
+
+        with clean_pg.connect() as conn:
+            unit = conn.execute(
+                text(
+                    "SELECT unit FROM metadata.indicator_definitions "
+                    "WHERE indicator_id = 'health_doctor_to_population_ratio'"
+                )
+            ).scalar_one()
+
+        assert unit == "per 10k"
+
+    def test_write_indicator_metadata_leaves_unit_null_until_supplied(self, clean_pg):
+        write_indicator_metadata(clean_pg, INDICATOR_METAS)
+
+        with clean_pg.connect() as conn:
+            unit = conn.execute(
+                text(
+                    "SELECT unit FROM metadata.indicator_definitions "
+                    "WHERE indicator_id = 'environment_forest_cover'"
+                )
+            ).scalar_one()
+
+        assert unit is None
+
+    def test_district_decomposition_indicator_rows_carry_the_unit(self, pg):
+        write_indicator_metadata(
+            pg, INDICATOR_METAS, units={"health_doctor_to_population_ratio": "per 10k"}
+        )
+        write_scoring_run(pg, _run(), INDICATOR_METAS)
+
+        indicator_values = read_district_decomposition(pg, "D1", "Health")["indicator_values"].set_index(
+            "indicator_id"
+        )
+
+        assert indicator_values.loc["health_doctor_to_population_ratio", "unit"] == "per 10k"
 
     def test_write_indicator_metadata_leaves_objective_null_until_mofnp_supplies_it(self, clean_pg):
         write_indicator_metadata(clean_pg, INDICATOR_METAS)

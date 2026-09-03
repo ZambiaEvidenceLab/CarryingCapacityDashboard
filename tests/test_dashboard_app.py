@@ -7,11 +7,13 @@ scoring math itself is covered by test_scoring_engine.py, not duplicated here.
 import dash_mantine_components as dmc
 import pandas as pd
 import pytest
+from dash import dcc
 
 from cca.dashboard.app import build_app
 from cca.dashboard.callbacks import (
     _district_title,
     compute_decomposition_children,
+    compute_indicator_compare_figure,
     compute_map_figure,
     compute_map_measure_patch,
     compute_radar_figure,
@@ -20,7 +22,7 @@ from cca.dashboard.callbacks import (
     compute_summary_strip,
     compute_supply_access_legend,
 )
-from cca.dashboard.colors import SECTOR_RAMP
+from cca.dashboard.colors import AMBER, SECTOR_DARK, SECTOR_RAMP
 from cca.dashboard.data import ACCESS, SUPPLY, build_district_geojson, score_range
 from cca.grid3.client import District
 from cca.scoring.engine import IndicatorMeta, run_scoring
@@ -108,6 +110,14 @@ def pg(clean_pg):
             "health_distance_to_nearest_facility": "GRID3",
             "environment_forest_cover": "MoL",
         },
+        units={
+            "health_doctor_to_population_ratio": "per 10k",
+            "health_distance_to_nearest_facility": "km",
+            "environment_forest_cover": "%",
+        },
+        # Only the doctor ratio carries an NDP objective; the others stay null so
+        # the "absent target omits the line" path is exercised too (ticket 07).
+        objectives={"health_doctor_to_population_ratio": 0.4},
     )
     return clean_pg
 
@@ -346,7 +356,7 @@ class TestComputeDecompositionChildren:
     def test_health_shows_dimension_and_indicator_scores(self, pg):
         texts = _flatten_text(compute_decomposition_children(pg, "D1", "Health"))
 
-        assert "Dimension scores" in texts and "Indicator scores" in texts
+        assert "Dimension scores" in texts and "Indicators" in texts
         assert SUPPLY in texts and ACCESS in texts  # the two Dimension rows
         assert "Doctor to population ratio" in texts  # humanised Indicator label
 
@@ -359,7 +369,7 @@ class TestComputeDecompositionChildren:
         texts = _flatten_text(compute_decomposition_children(pg, "D1", "Environment"))
 
         assert "Dimension scores" not in texts
-        assert "Indicator scores" in texts
+        assert "Indicators" in texts
         assert "Forest cover" in texts
 
     def test_an_incomplete_dimension_is_flagged(self, pg):
@@ -384,6 +394,103 @@ class TestComputeDecompositionChildren:
 
 def _alert_titles(children) -> list[str]:
     return [child.title for child in children if isinstance(child, dmc.Alert)]
+
+
+def _graphs(node) -> list:
+    """Every dcc.Graph in a component tree, depth-first."""
+    found: list = []
+    if isinstance(node, (list, tuple)):
+        for item in node:
+            found.extend(_graphs(item))
+        return found
+    if isinstance(node, dcc.Graph):
+        found.append(node)
+    children = getattr(node, "children", None)
+    if children is not None and not isinstance(children, str):
+        found.extend(_graphs(children))
+    return found
+
+
+class TestDecompositionRawValuesAndCompareCharts:
+    """Ticket 07: raw values + compare-to-others charts in the Decomposition View."""
+
+    def test_indicator_cards_show_the_raw_value_with_its_unit(self, pg):
+        texts = _flatten_text(compute_decomposition_children(pg, "D1", "Health"))
+
+        # D1's raw doctor-to-population ratio is 0.1 (per 10k) in _raw_values.
+        assert any("0.1 per 10k" in text for text in texts)
+
+    def test_indicator_cards_still_show_the_normalised_score(self, pg):
+        texts = _flatten_text(compute_decomposition_children(pg, "D1", "Health"))
+
+        assert any(text.startswith("score ") for text in texts)
+
+    def test_each_indicator_with_a_value_gets_a_compare_chart(self, pg):
+        children = compute_decomposition_children(pg, "D1", "Health")
+
+        # D1 reported both Health Indicators, so both cards carry a chart.
+        assert len(_graphs(children)) == 2
+
+    def test_compare_chart_highlights_this_district_over_the_greyed_cohort(self, pg):
+        figure = compute_indicator_compare_figure(pg, "Health", _doctor_row(pg, "D1"), "D1")
+
+        # Trace 0 is the greyed cohort strip; the last trace is this District's
+        # highlighted point in the Sector's dark hue at its own raw value (0.1).
+        cohort_trace = figure.data[0]
+        highlight = figure.data[-1]
+        assert cohort_trace.marker.color == "#CBD5D5"
+        assert highlight.marker.color == SECTOR_DARK["Health"]
+        assert list(highlight.x) == [pytest.approx(0.1)]
+
+    def test_compare_chart_marks_the_national_average(self, pg):
+        figure = compute_indicator_compare_figure(pg, "Health", _doctor_row(pg, "D1"), "D1")
+
+        # Cohort raw doctor ratios are 0.1 / 0.3 / 0.5 → mean 0.3, drawn as a line.
+        avg_lines = [s for s in figure.layout.shapes if s.x0 == pytest.approx(0.3) and s.x0 == s.x1]
+        assert avg_lines
+
+    def test_compare_chart_draws_an_objective_line_when_the_catalog_has_one(self, pg):
+        figure = compute_indicator_compare_figure(pg, "Health", _doctor_row(pg, "D1"), "D1")
+
+        # The doctor ratio's NDP objective (0.4) is drawn as an amber line.
+        objective_lines = [s for s in figure.layout.shapes if s.x0 == pytest.approx(0.4) and s.x0 == s.x1]
+        assert objective_lines
+        assert objective_lines[0].line.color == AMBER
+
+    def test_compare_chart_omits_the_objective_line_when_absent(self, pg):
+        # forest_cover has no objective in the fixture → only the nat-avg line.
+        figure = compute_indicator_compare_figure(pg, "Environment", _forest_row(pg, "D1"), "D1")
+
+        assert all(shape.line.color != AMBER for shape in figure.layout.shapes)
+
+    def test_compare_chart_has_no_highlight_point_when_this_district_has_no_value(self, pg):
+        # D3 never reported health_distance_to_nearest_facility, so its raw value
+        # is absent — the cohort strip still draws, but no highlighted point.
+        row = {"indicator_id": "health_distance_to_nearest_facility", "unit": "km", "objective": None}
+        figure = compute_indicator_compare_figure(pg, "Health", row, "D3")
+
+        # Only the cohort strip trace (D1, D2 reported it); no highlight trace.
+        assert len(figure.data) == 1
+
+
+def _indicator_row(pg, indicator_id: str, district_code: str) -> dict:
+    from cca.storage.io import read_district_decomposition
+
+    sector = {"health_doctor_to_population_ratio": "Health", "environment_forest_cover": "Environment"}[
+        indicator_id
+    ]
+    values = read_district_decomposition(pg, district_code, sector)["indicator_values"].set_index(
+        "indicator_id"
+    )
+    return {"indicator_id": indicator_id, **values.loc[indicator_id].to_dict()}
+
+
+def _doctor_row(pg, district_code: str) -> dict:
+    return _indicator_row(pg, "health_doctor_to_population_ratio", district_code)
+
+
+def _forest_row(pg, district_code: str) -> dict:
+    return _indicator_row(pg, "environment_forest_cover", district_code)
 
 
 class TestDecompositionUrbanNote:

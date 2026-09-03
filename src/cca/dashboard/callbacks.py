@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import dash_mantine_components as dmc
 import pandas as pd
-from dash import ALL, Dash, Input, Output, Patch, State, ctx, html
+from dash import ALL, Dash, Input, Output, Patch, State, ctx, dcc, html
 from dash.exceptions import PreventUpdate
 from plotly import graph_objects as go
 from sqlalchemy import Engine
@@ -30,6 +30,7 @@ from cca.dashboard.data import (
     is_urban_district,
     score_range,
     sector_dimension_indicators,
+    shape_compare_distribution,
     shape_decomposition,
     shape_map_data,
     shape_national_summary,
@@ -38,9 +39,11 @@ from cca.dashboard.data import (
 )
 from cca.storage.io import (
     read_district_decomposition,
+    read_indicator_cohort_values,
     read_latest_dimension_scores,
     read_latest_sector_scores,
     read_national_summary,
+    read_sector_cohort_values,
 )
 
 # Zambia's approximate national extent — a fixed view, not fitted to
@@ -63,6 +66,11 @@ _COMPLETENESS_TRACE = 2
 # The land-use note is surfaced only when *this* Sector is decomposed (spec.md:
 # contextual, not always-on noise), so the name is matched here by constant.
 AGRICULTURE = "Agriculture"
+
+# Fallback for a compare chart whose Indicator has no cohort rows at all — a
+# defensive case (a listed Indicator always has at least this District's value),
+# so `shape_compare_distribution` still gets the columns it reads.
+_EMPTY_COHORT = pd.DataFrame(columns=["district_code", "raw_value"])
 
 
 def _overlay_points(district_points: dict, codes) -> tuple[list[float], list[float]]:
@@ -400,53 +408,165 @@ def _indicator_meta_line(row: dict) -> str:
     return " · ".join(parts)
 
 
-def _indicator_card(row: dict):
-    """One Indicator's score-level card: label (+ Dimension badge), its reference
-    year and data source, and the 0-100 normalised score. The raw value and the
-    compare-to-others chart are ticket 07 — this card is the score-level view."""
+def _with_unit(text_value: str, unit) -> str:
+    """Append the Indicator's unit to a rendered value, or leave it bare when the
+    catalog carries no unit for it yet (nullable metadata field)."""
+    return f"{text_value} {unit}" if pd.notna(unit) else text_value
+
+
+def _raw_value_text(raw, unit) -> str:
+    """A raw Indicator value with its unit (e.g. '12.3 per 10k'), or an em dash
+    when the District reported no value."""
+    if raw is None or pd.isna(raw):
+        return "—"
+    return _with_unit(f"{float(raw):.1f}", unit)
+
+
+def _build_compare_figure(sector: str, row: dict, dist: dict) -> go.Figure:
+    """The compare-to-others chart for one Indicator (ticket 07): every District's
+    raw value as a greyed strip, this District highlighted in the Sector's dark
+    hue, the national average as a dotted line, and — where the catalog carries a
+    raw-unit NDP objective — that target as a labelled amber line.
+
+    A deterministic vertical jitter spreads the strip so overlapping raw values
+    don't stack into one dot; it isn't data, only separation."""
+    values = dist["values"]
+    unit = row.get("unit")
+    objective = row.get("objective")
+
+    # Deterministic vertical jitter (no RNG, so the strip is stable across
+    # re-renders): spread points over 9 evenly-spaced rows within +/-0.4 of the
+    # centre line, comfortably inside the axis's [-0.7, 0.7] range so the larger
+    # highlighted point at y=0 still stands clear.
+    ys = [((i % 9) / 9.0 - 0.5) * 0.8 for i in range(len(values))]
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=values,
+            y=ys,
+            mode="markers",
+            marker={"size": 6, "color": "#CBD5D5"},
+            hoverinfo="skip",
+            showlegend=False,
+        )
+    )
+    if dist["mean"] is not None:
+        fig.add_vline(
+            x=dist["mean"],
+            line={"color": "#9AA7B1", "dash": "dot", "width": 1.5},
+            annotation_text="nat. avg",
+            annotation_font_size=10,
+            annotation_position="top",
+        )
+    if pd.notna(objective):
+        fig.add_vline(
+            x=float(objective),
+            line={"color": AMBER, "dash": "dash", "width": 2},
+            annotation_text="NDP objective",
+            annotation_font_size=10,
+            annotation_position="bottom",
+        )
+    if dist["this_value"] is not None:
+        # `%{x:.1f}` matches the card's raw-value precision; `_with_unit` appends
+        # the same unit label the card shows (or nothing when the catalog has none).
+        fig.add_trace(
+            go.Scatter(
+                x=[dist["this_value"]],
+                y=[0],
+                mode="markers",
+                marker={"size": 15, "color": SECTOR_DARK[sector], "line": {"color": "white", "width": 2}},
+                hovertemplate=_with_unit("%{x:.1f}", unit) + "<extra></extra>",
+                showlegend=False,
+            )
+        )
+    fig.update_layout(
+        height=110,
+        margin={"l": 8, "r": 8, "t": 14, "b": 24},
+        yaxis={"visible": False, "range": [-0.7, 0.7]},
+        xaxis={"title": {"text": unit, "font": {"size": 10}} if pd.notna(unit) else {}, "ticks": "outside"},
+        plot_bgcolor="white",
+    )
+    return fig
+
+
+def compute_indicator_compare_figure(engine: Engine, sector: str, row: dict, district_code: str) -> go.Figure:
+    """Read one Indicator's cohort raw values and build its compare-to-others chart.
+
+    Split from `_build_compare_figure` so the read (a per-Indicator cohort query)
+    stays out of the pure figure assembly — the figure is a display reshape of
+    already-scored raw values, never a calculation (ADR-0010)."""
+    cohort = read_indicator_cohort_values(engine, row["indicator_id"])
+    dist = shape_compare_distribution(district_code, cohort)
+    return _build_compare_figure(sector, row, dist)
+
+
+def _indicator_card(row: dict, compare_figure: go.Figure | None):
+    """One Indicator's card (ticket 07): label (+ Dimension badge), reference year
+    and data source, the **raw value with its unit** (with the 0-100 normalised
+    score beneath it), and the compare-to-others chart. A District that reported
+    no value for the Indicator shows a clear 'no value reported' note instead of
+    a chart (dropped-not-imputed, ADR-0007/0008)."""
     dimension = row.get("dimension")
     dim_badge = (
         dmc.Badge(dimension, size="xs", variant="outline", color="gray") if pd.notna(dimension) else None
     )
     meta_line = _indicator_meta_line(row)
-    return dmc.Paper(
-        withBorder=True,
-        radius="md",
-        p="sm",
-        children=dmc.Group(
-            justify="space-between",
-            align="flex-start",
-            wrap="nowrap",
-            children=[
-                dmc.Stack(
-                    gap=2,
-                    children=[
-                        dmc.Group(
-                            gap="xs",
-                            children=[dmc.Text(indicator_label(row["indicator_id"]), fw=600, size="sm"), dim_badge],
-                        ),
-                        dmc.Text(meta_line, size="xs", c="dimmed") if meta_line else None,
-                    ],
-                ),
-                dmc.Text(_score_text(row.get("value")), fw=700, size="md"),
-            ],
-        ),
+    header = dmc.Group(
+        justify="space-between",
+        align="flex-start",
+        wrap="nowrap",
+        children=[
+            dmc.Stack(
+                gap=2,
+                children=[
+                    dmc.Group(
+                        gap="xs",
+                        children=[dmc.Text(indicator_label(row["indicator_id"]), fw=600, size="sm"), dim_badge],
+                    ),
+                    dmc.Text(meta_line, size="xs", c="dimmed") if meta_line else None,
+                ],
+            ),
+            dmc.Stack(
+                gap=0,
+                align="flex-end",
+                children=[
+                    dmc.Text(_raw_value_text(row.get("raw_value"), row.get("unit")), fw=700, size="md"),
+                    dmc.Text(f"score {_score_text(row.get('value'))}", size="xs", c="dimmed"),
+                ],
+            ),
+        ],
     )
+    if compare_figure is not None:
+        body = dcc.Graph(figure=compare_figure, config={"displayModeBar": False})
+    else:
+        body = dmc.Text("No value reported for this District.", size="xs", c="dimmed")
+    return dmc.Paper(withBorder=True, radius="md", p="sm", children=dmc.Stack(gap="xs", children=[header, body]))
 
 
 def compute_decomposition_children(
     engine: Engine, district_code: str, sector: str, is_urban: bool = False
 ) -> list:
-    """The score-level Decomposition View for one District and Sector (ticket 06).
+    """The Decomposition View for one District and Sector (tickets 06, 07).
 
-    Shows the Sector's Dimension scores (Supply/Access) and its per-Indicator
-    normalised scores with each Indicator's reference year, data source, and a
-    completeness flag where a score is incomplete. Environment has no Dimensions
-    (ADR-0003), so the Dimension section is omitted and Indicators sit directly
-    under the Sector Index. A mostly-urban District decomposing Agriculture gets
-    the land-use note, surfaced only in that context (spec.md)."""
+    Shows the Sector's Dimension scores (Supply/Access) and, per Indicator, its
+    raw value with unit, its 0-100 normalised score, and a compare-to-others
+    chart of every District's raw value with this one highlighted, the national
+    average, and any NDP objective (ticket 07). Each Indicator's reference year
+    and data source appear on its card. Environment has no Dimensions (ADR-0003),
+    so the Dimension section is omitted and Indicators sit directly under the
+    Sector Index. A mostly-urban District decomposing Agriculture gets the
+    land-use note, surfaced only in that context (spec.md)."""
     breakdown = read_district_decomposition(engine, district_code, sector)
     shaped = shape_decomposition(district_code, sector, breakdown)
+
+    # One read for the whole Sector's compare-to-others charts, grouped by
+    # Indicator, rather than a query per Indicator card (this Sector's Indicators
+    # are ~5-6, and the drawer opens on demand — but the batched read keeps the
+    # decomposition path off an N+1).
+    cohort_by_indicator = {
+        indicator_id: group for indicator_id, group in read_sector_cohort_values(engine, sector).groupby("indicator_id")
+    }
 
     children: list = []
     if is_urban and sector == AGRICULTURE:
@@ -472,8 +592,21 @@ def compute_decomposition_children(
         children.append(dmc.Text("Dimension scores", fw=600, size="sm"))
         children.append(dmc.Stack(gap="xs", children=[_dimension_row(row) for row in shaped["dimensions"]]))
 
-    children.append(dmc.Text("Indicator scores", fw=600, size="sm"))
-    children.append(dmc.Stack(gap="sm", children=[_indicator_card(row) for row in shaped["indicators"]]))
+    children.append(dmc.Text("Indicators", fw=600, size="sm"))
+    cards = []
+    for row in shaped["indicators"]:
+        # A listed Indicator normally carries a raw value (a missing one is
+        # dropped, so it has no row at all); the chart is omitted defensively
+        # when a raw value is somehow absent, and always tolerates this District
+        # not being in the cohort (no highlighted point).
+        raw = row.get("raw_value")
+        if raw is not None and not pd.isna(raw):
+            cohort = cohort_by_indicator.get(row["indicator_id"], _EMPTY_COHORT)
+            figure = _build_compare_figure(sector, row, shape_compare_distribution(district_code, cohort))
+        else:
+            figure = None
+        cards.append(_indicator_card(row, figure))
+    children.append(dmc.Stack(gap="sm", children=cards))
     return children
 
 
@@ -513,20 +646,26 @@ def register_callbacks(
         Input("sector-select", "value"),
         Input("measure", "value"),
         State("selected-district", "data"),
+        State("map-graph", "figure"),
     )
-    def _render_map(sector, measure, selected_code):
+    def _render_map(sector, measure, selected_code, existing_figure):
         # A Measure switch within a Sector only recolours — Patch the z/range and
         # completeness overlay, never re-send the geometry (ADR-0017 lever 3). A
-        # Sector change (or first load) rebuilds: a new Sector means a new hue
-        # ramp. Selection is read from State (not an Input) so picking a District
-        # never lands here and never resends geometry; that path patches the halo.
+        # Sector change rebuilds: a new Sector means a new hue ramp. Selection is
+        # read from State (not an Input) so picking a District never lands here
+        # and never resends geometry; that path patches the halo.
         #
-        # When a Sector change to Environment resets the Measure value, this fires
-        # twice — a rebuild (Sector trigger) then a Patch (Measure trigger). The
-        # Patch always lands on a just-rebuilt figure of the *same* Sector, so the
-        # result is correct; the extra Patch is cheap and only on that reset.
+        # A Patch can only recolour a figure that already exists. On first load
+        # the map has no figure yet, and `_configure_measure_control` writes
+        # `measure.value` during that same initial render — which makes `measure`
+        # the trigger here, not `sector-select`. Without the `existing_figure`
+        # guard the first render would take the Patch branch and land on an empty
+        # graph, leaving the default Sector's map blank until the user switches
+        # Sectors (which forces a full rebuild). Guarding on an existing figure
+        # forces a full build whenever there's nothing to patch — first load, or
+        # any Measure-triggered render that somehow precedes a build.
         subtitle = compute_subtitle(engine, sector, measure)
-        if ctx.triggered_id == "measure":
+        if ctx.triggered_id == "measure" and existing_figure:
             patch = compute_map_measure_patch(engine, districts_df, district_points, sector, measure)
             return patch, subtitle
         figure = compute_map_figure(

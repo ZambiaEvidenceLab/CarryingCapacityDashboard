@@ -134,10 +134,13 @@ def write_indicator_metadata(
     *,
     reference_years: dict[str, int] | None = None,
     data_sources: dict[str, str] | None = None,
+    units: dict[str, str] | None = None,
     objectives: dict[str, float] | None = None,
 ) -> None:
     """Upsert the indicator catalog's definitions, reference years, data-source attribution,
-    and NDP objectives (ADR-0019 — nullable, empty until MoFNP supplies values).
+    raw-unit labels, and NDP objectives. `unit` is a display-only catalog label (like
+    `data_source`); `objective` holds a future NDP target (ADR-0019) — both nullable,
+    empty until MoFNP supplies values.
 
     Unlike the processed layer, this describes the catalog itself rather
     than a scored run, so it isn't part of ADR-0014's append-only
@@ -145,6 +148,7 @@ def write_indicator_metadata(
     """
     reference_years = reference_years or {}
     data_sources = data_sources or {}
+    units = units or {}
     objectives = objectives or {}
 
     with engine.begin() as conn:
@@ -152,13 +156,13 @@ def write_indicator_metadata(
             conn.execute(
                 text(
                     "INSERT INTO metadata.indicator_definitions "
-                    "(indicator_id, sector, dimension, orientation, reference_year, data_source, objective) "
+                    "(indicator_id, sector, dimension, orientation, reference_year, data_source, unit, objective) "
                     "VALUES (:indicator_id, :sector, :dimension, :orientation, :reference_year, "
-                    ":data_source, :objective) "
+                    ":data_source, :unit, :objective) "
                     "ON CONFLICT (indicator_id) DO UPDATE SET "
                     "sector = EXCLUDED.sector, dimension = EXCLUDED.dimension, "
                     "orientation = EXCLUDED.orientation, reference_year = EXCLUDED.reference_year, "
-                    "data_source = EXCLUDED.data_source, objective = EXCLUDED.objective"
+                    "data_source = EXCLUDED.data_source, unit = EXCLUDED.unit, objective = EXCLUDED.objective"
                 ),
                 {
                     "indicator_id": meta.indicator_id,
@@ -167,6 +171,7 @@ def write_indicator_metadata(
                     "orientation": meta.orientation,
                     "reference_year": reference_years.get(meta.indicator_id),
                     "data_source": data_sources.get(meta.indicator_id),
+                    "unit": units.get(meta.indicator_id),
                     "objective": objectives.get(meta.indicator_id),
                 },
             )
@@ -239,7 +244,7 @@ def read_district_decomposition(engine: Engine, district_code: str, sector: str)
         indicator_values = pd.read_sql(
             text(
                 "SELECT v.indicator_id, v.value, v.raw_value, m.dimension, m.reference_year, "
-                "m.data_source, m.objective "
+                "m.data_source, m.unit, m.objective "
                 "FROM indicators.indicator_values v "
                 f"{_CURRENT_RUN_JOIN.format(alias='v')} "
                 "LEFT JOIN metadata.indicator_definitions m ON m.indicator_id = v.indicator_id "
@@ -272,6 +277,28 @@ def read_indicator_cohort_values(engine: Engine, indicator_id: str) -> pd.DataFr
         )
 
 
+def read_sector_cohort_values(engine: Engine, sector: str) -> pd.DataFrame:
+    """Every District's raw value for every Indicator in one Sector, current run.
+
+    One query for the whole Sector's compare-to-others charts (ticket 07), so the
+    Decomposition View builds all its Indicator distributions from a single read
+    rather than one query per Indicator. Callers group by `indicator_id`
+    themselves. A District with no value for an Indicator simply has no row
+    (ADR-0007/ADR-0008: dropped, not imputed).
+    """
+    with engine.connect() as conn:
+        return pd.read_sql(
+            text(
+                "SELECT v.indicator_id, v.district_code, v.raw_value "
+                "FROM indicators.indicator_values v "
+                f"{_CURRENT_RUN_JOIN.format(alias='v')} "
+                "WHERE r.is_current = true AND v.sector = :sector"
+            ),
+            conn,
+            params={"sector": sector},
+        )
+
+
 def read_national_summary(engine: Engine, sector: str) -> dict[str, float | int | None]:
     """National summary strip for one Sector: average score, spread, and low-completeness count."""
     with engine.connect() as conn:
@@ -296,7 +323,8 @@ def read_indicator_catalog(engine: Engine) -> pd.DataFrame:
     with engine.connect() as conn:
         return pd.read_sql(
             text(
-                "SELECT indicator_id, sector, dimension, orientation, reference_year, data_source, objective "
+                "SELECT indicator_id, sector, dimension, orientation, reference_year, "
+                "data_source, unit, objective "
                 "FROM metadata.indicator_definitions"
             ),
             conn,

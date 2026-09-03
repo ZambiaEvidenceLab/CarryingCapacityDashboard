@@ -20,14 +20,34 @@ against real data.
 
 **Blocked by:** 06 (drawer + decomposition), 02 (raw values available to read).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Each Indicator row shows its raw value + unit and its normalised score.
-- [ ] Each Indicator shows a compare-to-others chart of all 116 Districts' raw
+- [x] Each Indicator row shows its raw value + unit and its normalised score.
+      (`_indicator_card` / `_raw_value_text`; unit from the new nullable
+      `metadata.indicator_definitions.unit` column.)
+- [x] Each Indicator shows a compare-to-others chart of all 116 Districts' raw
       values, this District highlighted, others greyed, national average marked.
-- [ ] Where a metadata objective/target exists for the Indicator, it is drawn as a
+      (`_build_compare_figure`; "all 116" is all *reporting* Districts —
+      dropped-not-imputed means a non-reporting District has no dot.)
+- [x] Where a metadata objective/target exists for the Indicator, it is drawn as a
       labelled line in raw units; absent targets simply omit the line.
-- [ ] Districts with no value for an Indicator are handled gracefully (no chart /
-      clear "no value reported" state), consistent with dropped-not-imputed.
-- [ ] All figures come from the processed layer read paths (no runtime
-      calculation — ADR-0010).
+      (`objective` from the catalog; amber `NDP objective` vline.)
+- [x] Districts with no value for an Indicator are handled gracefully (no chart /
+      clear "no value reported" state), consistent with dropped-not-imputed. (A
+      missing Indicator has no row so no card; the "No value reported" note and
+      no-highlight-point branches are the defensive fallback.)
+- [x] All figures come from the processed layer read paths (no runtime
+      calculation — ADR-0010). (New batched `read_sector_cohort_values`; the
+      national-average line is a display reshape — the same `.mean()` pattern
+      `shape_radar_data` already uses for the radar's national-average ring.)
+
+## Implementation notes
+
+- **Data-model change (needed for criterion 1):** added a nullable
+  `unit` column to `metadata.indicator_definitions`, mirroring `objective` —
+  a display-only catalog label, empty until MoFNP supplies real units.
+  `seed_synthetic_data.py` seeds plausible demo units. Existing databases need
+  `ALTER TABLE metadata.indicator_definitions ADD COLUMN IF NOT EXISTS unit VARCHAR`
+  (`create_all` only does CREATE-IF-NOT-EXISTS, not column adds).
+- The decomposition heading changed from "Indicator scores" to "Indicators"
+  (cards now lead with the raw value, not only the score).

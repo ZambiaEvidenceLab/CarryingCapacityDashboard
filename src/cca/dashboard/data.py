@@ -240,6 +240,28 @@ def shape_decomposition(district_code: str, sector: str, breakdown: dict[str, pd
     }
 
 
+def shape_compare_distribution(district_code: str, cohort_values: pd.DataFrame) -> dict:
+    """One Indicator's raw values across the cohort, for the compare-to-others chart (ticket 07).
+
+    `cohort_values` is `read_indicator_cohort_values`' output — one raw value
+    per District that reported the Indicator (a District with no value simply
+    has no row: dropped, not imputed, ADR-0007/0008). Returns the present raw
+    `values`, `this_value` for the selected District (None when it didn't
+    report the Indicator), and the cohort `mean` for the national-average line
+    (None for an empty cohort). The mean is a display reshape of already-scored
+    raw values, not a scoring step (ADR-0010) — the same pattern
+    `shape_radar_data` uses for the national-average ring.
+    """
+    present = cohort_values["raw_value"].dropna()
+    selected = cohort_values.loc[cohort_values["district_code"] == district_code, "raw_value"]
+    this_value = None if selected.empty or pd.isna(selected.iloc[0]) else float(selected.iloc[0])
+    return {
+        "values": [float(v) for v in present],
+        "this_value": this_value,
+        "mean": float(present.mean()) if not present.empty else None,
+    }
+
+
 def is_urban_district(districts: pd.DataFrame, district_code: str) -> bool:
     """Whether a district is flagged mostly-urban (Urban annotation, CONTEXT.md)."""
     row = districts.loc[districts["district_code"] == district_code]

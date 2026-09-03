@@ -32,6 +32,40 @@ from cca.synthetic.generator import generate_synthetic_dataset
 
 load_dotenv()
 
+# Plausible raw-unit labels for the demo, so the decomposition's raw values and
+# compare-to-others charts (ticket 07) read with a unit rather than a bare
+# number. Demo-only — the real catalog will carry MoFNP-supplied units.
+SYNTHETIC_UNITS: dict[str, str] = {
+    "health_doctor_to_population_ratio": "per 1k",
+    "health_nurse_to_population_ratio": "per 1k",
+    "health_facilities_with_functional_emonc": "facilities",
+    "health_skilled_birth_attendance_rate": "%",
+    "health_distance_to_nearest_facility": "km",
+    "health_pct_population_registered_nhima": "%",
+    "education_pupil_teacher_ratio_primary": "pupils/teacher",
+    "education_pupil_teacher_ratio_secondary": "pupils/teacher",
+    "education_electrification_of_schools": "%",
+    "education_schools_with_internet": "%",
+    "education_distance_to_nearest_school": "km",
+    "education_mean_years_of_schooling": "years",
+    "agriculture_extension_worker_to_farmer_ratio": "farmers/worker",
+    "agriculture_maize_production_per_capita": "MT/person",
+    "agriculture_fra_storage_tonnes_per_capita": "tonnes/person",
+    "agriculture_pct_population_receiving_fisp": "%",
+    "agriculture_pct_farmers_reached_by_extension": "%",
+    "infrastructure_water_point_density": "per 1k",
+    "infrastructure_grid_connection_capacity": "kVA/1k",
+    "infrastructure_network_tower_coverage": "%",
+    "infrastructure_pct_households_safe_water": "%",
+    "infrastructure_distance_to_nearest_water_point": "km",
+    "infrastructure_pct_households_electrified": "%",
+    "environment_forest_cover": "%",
+    "environment_ecological_diversity": "index",
+    "environment_population_growth_rate": "%/yr",
+    "environment_cattlehead_per_capita": "head/person",
+    "environment_charcoal_consumption_domestic": "kg/hh",
+}
+
 DEFAULT_DATABASE_URL = "postgresql+psycopg://cca_dev:cca_dev_local_only@localhost:5432/cca_dev"
 DEFAULT_GRID3_CACHE_PATH = Path(__file__).parent / ".grid3_districts_cache.json"
 DEFAULT_URBAN_DISTRICTS = frozenset({"Lusaka", "Ndola", "Kitwe", "Livingstone"})
@@ -74,6 +108,7 @@ def main(argv: list[str] | None = None) -> int:
         CCA_INDICATORS,
         reference_years={meta.indicator_id: 2023 for meta in CCA_INDICATORS},
         data_sources={meta.indicator_id: "Synthetic demo data" for meta in CCA_INDICATORS},
+        units=SYNTHETIC_UNITS,
     )
 
     raw = generate_synthetic_dataset(districts, seed=args.seed)
