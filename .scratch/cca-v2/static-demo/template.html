@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zambia Carrying Capacity Assessment — Prototype</title>
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js" charset="utf-8"></script>
+<style>
+  :root{ --ink:#1b2b2b; --muted:#6a7b7b; --line:#e2e8e8; --bg:#f6f8f8; --panel:#ffffff; --teal:#0b4f4a; --amber:#e8a33d; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; color:var(--ink); background:var(--bg); }
+  .banner{ background:#fff6e6; color:#7a5314; font-size:13px; text-align:center; padding:5px 12px; border-bottom:1px solid #f0dcae; }
+  header{ background:var(--teal); color:#fff; padding:12px 20px; display:flex; justify-content:space-between; align-items:center; }
+  header h1{ font-size:18px; margin:0; font-weight:600; }
+  header .sub{ font-size:12px; opacity:.8; }
+  header button{ background:rgba(255,255,255,.15); color:#fff; border:1px solid rgba(255,255,255,.4); border-radius:6px; padding:6px 12px; cursor:pointer; font-size:13px; }
+  header button:hover{ background:rgba(255,255,255,.28); }
+  .wrap{ max-width:1440px; margin:0 auto; padding:16px 20px 40px; }
+  .controls{ display:flex; align-items:flex-end; gap:24px; flex-wrap:wrap; }
+  .ctl label{ display:block; font-size:12px; font-weight:600; color:var(--muted); margin-bottom:4px; }
+  select{ padding:7px 10px; border:1px solid var(--line); border-radius:8px; font-size:14px; background:#fff; min-width:190px; }
+  .seg-wrap{ display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:#fff; }
+  .seg{ border:0; background:#fff; padding:7px 16px; font-size:13px; cursor:pointer; color:var(--ink); }
+  .seg.active{ background:var(--teal); color:#fff; }
+  .infolink{ font-size:12px; color:#2a72b5; cursor:help; position:relative; }
+  .infolink .pop{ display:none; position:absolute; top:20px; left:0; z-index:50; width:340px; background:#fff; border:1px solid var(--line); border-radius:10px; box-shadow:0 8px 28px rgba(0,0,0,.16); padding:12px; color:var(--ink); font-size:13px; }
+  .infolink:hover .pop{ display:block; }
+  .sacols{ display:flex; gap:28px; } .sahdr{ font-size:11px; font-weight:700; text-transform:uppercase; color:var(--muted); margin-bottom:3px; }
+  .subtitle{ font-size:13px; color:var(--muted); margin:10px 2px 16px; }
+  .grid{ display:grid; grid-template-columns:2fr 1fr; gap:16px; align-items:start; }
+  #map{ height:620px; background:#fff; border:1px solid var(--line); border-radius:12px; }
+  .panel{ background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:8px; }
+  .panel .phdr{ display:flex; justify-content:space-between; padding:6px 8px; font-size:13px; font-weight:600; }
+  .panel .phdr .m{ color:var(--muted); font-weight:400; }
+  #list-body{ max-height:560px; overflow-y:auto; }
+  .row{ display:flex; align-items:center; gap:10px; width:100%; text-align:left; background:none; border:0; padding:7px 8px; border-radius:8px; cursor:pointer; }
+  .row:hover{ background:#f1f5f5; }
+  .row.selected{ background:#e7f0ef; outline:1px solid #bcd6d3; }
+  .rank{ width:22px; color:var(--muted); font-size:13px; }
+  .dot{ width:8px; height:8px; border-radius:50%; flex:none; } .dot-ok{ background:transparent; } .dot-warn{ background:var(--amber); }
+  .rmid{ flex:1; min-width:0; } .rname{ font-size:14px; font-weight:500; display:flex; align-items:center; gap:6px; }
+  .bar{ display:block; height:6px; background:#eef2f2; border-radius:4px; margin-top:4px; overflow:hidden; }
+  .barfill{ display:block; height:100%; border-radius:4px; }
+  .rscore{ width:30px; text-align:right; font-weight:700; font-size:14px; }
+  .chip{ font-size:10px; padding:1px 6px; border-radius:10px; background:#eef2f2; color:var(--muted); }
+  .chip.out{ background:none; border:1px solid var(--line); } .chip.warn{ background:#fdf1d6; color:#7a5314; }
+  .scrim{ position:fixed; inset:0; background:rgba(0,0,0,.28); opacity:0; pointer-events:none; transition:opacity .2s; z-index:90; }
+  .scrim.open{ opacity:1; pointer-events:auto; }
+  .drawer{ position:fixed; top:0; right:0; height:100%; width:600px; max-width:94vw; background:#fff; box-shadow:-6px 0 24px rgba(0,0,0,.16); transform:translateX(100%); transition:transform .22s ease; z-index:100; display:flex; flex-direction:column; }
+  .drawer.open{ transform:translateX(0); }
+  .drawer .dhdr{ display:flex; justify-content:space-between; align-items:center; padding:14px 18px; border-bottom:1px solid var(--line); }
+  .drawer .dhdr h2{ font-size:16px; margin:0; }
+  .drawer .body{ padding:16px 18px; overflow-y:auto; }
+  .drawer .x{ border:0; background:none; font-size:22px; cursor:pointer; color:var(--muted); line-height:1; }
+  #radar{ height:300px; }
+  .decomp-ctl{ margin:12px 0 8px; } .decomp-ctl label{ font-size:12px; font-weight:600; color:var(--muted); margin-right:8px; }
+  .card{ border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:10px; }
+  .cardhdr{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+  .cname{ font-size:14px; font-weight:600; display:flex; align-items:center; gap:6px; }
+  .cval{ text-align:right; } .big{ font-size:16px; font-weight:700; }
+  .muted{ color:var(--muted); } .small{ font-size:12px; }
+  .strip{ height:110px; }
+  .alert{ background:#eef2f2; border-radius:8px; padding:10px 12px; font-size:13px; margin-bottom:12px; }
+  .modal{ position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,.35); z-index:200; }
+  .modal.open{ display:flex; }
+  .modal .box{ background:#fff; border-radius:12px; max-width:560px; padding:22px; }
+  .modal h3{ margin-top:0; }
+  .modal p{ font-size:14px; line-height:1.5; }
+  footer{ text-align:center; color:var(--muted); font-size:12px; padding:24px; }
+  @media (max-width:900px){ .grid{ grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<div class="banner">⚠ Prototype — <b>synthetic demonstration data</b>, not official figures. Illustrates the dashboard concept only.</div>
+<header>
+  <div><h1>Zambia Carrying Capacity Assessment</h1><div class="sub">District-level sector capacity — static prototype</div></div>
+  <button id="method-btn">Methodology</button>
+</header>
+
+<div class="wrap">
+  <div class="controls">
+    <div class="ctl"><label for="sector">Sector</label>
+      <select id="sector"></select></div>
+    <div class="ctl"><label>Measure &nbsp;<span class="infolink">ⓘ what's in Supply / Access?<span class="pop" id="sa-legend"></span></span></label>
+      <div class="seg-wrap" id="measure">
+        <button class="seg" data-m="overall">Overall</button>
+        <button class="seg" data-m="supply">Supply</button>
+        <button class="seg" data-m="access">Access</button>
+      </div></div>
+  </div>
+  <div class="subtitle" id="subtitle"></div>
+  <div class="grid">
+    <div id="map"></div>
+    <div class="panel">
+      <div class="phdr"><span>Districts, worst-served first</span><span class="m">score</span></div>
+      <div id="list-body"></div>
+    </div>
+  </div>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<div class="drawer" id="drawer">
+  <div class="dhdr"><h2 id="drawer-title"></h2><button class="x" id="drawer-x">×</button></div>
+  <div class="body">
+    <div class="muted small" style="font-weight:600;margin-bottom:4px;">Cross-sector profile — click an axis to switch the decomposition below</div>
+    <div id="radar"></div>
+    <div class="decomp-ctl"><label for="decomp-sector">Decompose sector</label>
+      <select id="decomp-sector"></select></div>
+    <div id="decomp"></div>
+  </div>
+</div>
+
+<div class="modal" id="method">
+  <div class="box">
+    <h3>Methodology</h3>
+    <p>Each <b>Sector Index</b> is a 0–100 score. Each Indicator is winsorised (1st/99th percentile) then min-max normalised across all 116 districts, so scores are <b>relative to the cohort</b>, not a fixed benchmark.</p>
+    <p>Indicators average within a <b>Dimension</b> (Supply / Access); Dimensions average within a Sector. <b>Environment</b> has no Dimensions — its Indicators average directly.</p>
+    <p><b>Why isn't the national average 50?</b> Min-max only pins the lowest district to 0 and the highest to 100 — the mean sits wherever the distribution's mass is. Averaging several 0–100 Indicators into a Sector Index also pulls the spread toward the middle.</p>
+    <p><b>Darker = more capacity.</b> The five Sector Indices are never combined into a single composite score.</p>
+    <button class="seg active" id="method-close" style="border-radius:8px;">Close</button>
+  </div>
+</div>
+
+<footer>Static prototype · synthetic data · built from the CCA v2 design.</footer>
+
+<script>
+const P = /*__PAYLOAD__*/null;
+const idxByCode = {}; P.districts.forEach((d,i)=>idxByCode[d.code]=i);
+const MLABEL = {overall:'Overall', supply:'Supply', access:'Access'};
+const state = { sector:P.sectors[0], measure:'overall', selected:null };
+const el = id => document.getElementById(id);
+
+function zData(sec,meas){ return P.scores[sec][meas]; }
+function zRange(sec,meas){ const v=zData(sec,meas).filter(x=>x!=null); const lo=Math.min(...v), hi=Math.max(...v); return hi>lo?[lo,hi]:[0,100]; }
+
+// ---- map ----
+let mapBound=false;
+function renderMap(){
+  const sec=state.sector, meas=state.measure, [lo,hi]=zRange(sec,meas);
+  const trace={ type:'choropleth', geojson:P.geojson, featureidkey:'id',
+    locations:P.districts.map(d=>d.code), z:zData(sec,meas), zmin:lo, zmax:hi,
+    colorscale:P.ramps[sec], marker:{line:{color:'white',width:0.4}},
+    colorbar:{title:{text:sec+'<br>'+MLABEL[meas]}, thickness:12, len:0.85},
+    customdata:P.districts.map(d=>[d.name, P.complete[sec][idxByCode[d.code]]?'Complete':'Incomplete data']),
+    hovertemplate:'<b>%{customdata[0]}</b><br>Score: %{z}<br>%{customdata[1]}<extra></extra>' };
+  const layout={ geo:{fitbounds:'locations', visible:false, projection:{type:'mercator'}, bgcolor:'rgba(0,0,0,0)'},
+    margin:{l:0,r:0,t:0,b:0}, paper_bgcolor:'rgba(0,0,0,0)' };
+  Plotly.react('map',[trace],layout,{displayModeBar:false, responsive:true}).then(gd=>{
+    if(!mapBound){ gd.on('plotly_click', e=>{ const c=e.points[0].location; if(c) openDrawer(c); }); mapBound=true; }
+  });
+}
+
+// ---- ranked list ----
+function renderList(){
+  const sec=state.sector, meas=state.measure, dark=P.rampDark[sec];
+  const rows=P.districts.map((d,i)=>({d,i,s:zData(sec,meas)[i]})).filter(r=>r.s!=null).sort((a,b)=>a.s-b.s);
+  el('list-body').innerHTML = rows.map((r,rank)=>{
+    const comp=P.complete[sec][r.i];
+    const dot = comp?'<span class="dot"></span>':'<span class="dot dot-warn" title="Incomplete data"></span>';
+    const urban = r.d.urban?'<span class="chip">Urban</span>':'';
+    const sel = state.selected===r.d.code?' selected':'';
+    return `<button class="row${sel}" data-code="${r.d.code}"><span class="rank">${rank+1}</span>${dot}`
+      +`<span class="rmid"><span class="rname">${r.d.name}${urban}</span>`
+      +`<span class="bar"><span class="barfill" style="width:${r.s}%;background:${dark}"></span></span></span>`
+      +`<span class="rscore">${Math.round(r.s)}</span></button>`;
+  }).join('');
+}
+
+function renderSubtitle(){ const [lo,hi]=zRange(state.sector,state.measure);
+  el('subtitle').textContent = `Showing ${state.sector} — ${MLABEL[state.measure]}. Darker = more capacity (shaded across this sector's range, ${Math.round(lo)}–${Math.round(hi)}). Click a district for detail.`; }
+
+function renderMeasure(){ const avail=P.measures[state.sector];
+  document.querySelectorAll('#measure .seg').forEach(b=>{ const ok=avail.includes(b.dataset.m);
+    b.style.display=ok?'':'none'; b.classList.toggle('active', b.dataset.m===state.measure); }); }
+
+function renderSA(){ const sec=state.sector;
+  if(sec==='Environment'){ el('sa-legend').innerHTML='<div class="muted">Environment has no Supply/Access split — its Indicators average directly:</div>'+P.indMeta[sec].map(i=>`<div>• ${i.name}</div>`).join(''); return; }
+  const cols=dim=>P.indMeta[sec].filter(i=>i.dim===dim).map(i=>`<div>• ${i.name}</div>`).join('');
+  el('sa-legend').innerHTML=`<div class="sacols"><div><div class="sahdr">Supply</div>${cols('Supply')}</div><div><div class="sahdr">Access</div>${cols('Access')}</div></div>`; }
+
+// ---- drawer / radar / decomposition ----
+function openDrawer(code){ state.selected=code; renderList();
+  const d=P.districts[idxByCode[code]];
+  el('drawer-title').textContent=`${d.name} · ${d.province}`;
+  el('drawer').classList.add('open'); el('scrim').classList.add('open');
+  renderRadar(code); el('decomp-sector').value=state.sector; renderDecomp(state.sector, code); }
+function closeDrawer(){ el('drawer').classList.remove('open'); el('scrim').classList.remove('open'); state.selected=null; renderList(); }
+
+function renderRadar(code){ const i=idxByCode[code], d=P.districts[i];
+  const dist=P.sectors.map(s=>P.scores[s]['overall'][i]);
+  const natl=P.sectors.map(s=>P.natAvg[s]['overall']);
+  const th=P.sectors.concat([P.sectors[0]]);
+  Plotly.newPlot('radar',[
+    {type:'scatterpolar', r:natl.concat([natl[0]]), theta:th, name:'National avg', fill:'toself', opacity:0.3, line:{color:'#9AA7B1'}},
+    {type:'scatterpolar', r:dist.concat([dist[0]]), theta:th, name:d.name, fill:'toself', line:{color:'#0b4f4a'}, mode:'lines+markers'}
+  ],{polar:{radialaxis:{range:[0,100],visible:true}}, margin:{l:40,r:40,t:20,b:40}, height:300, showlegend:true, legend:{orientation:'h',y:-0.15}}, {displayModeBar:false, responsive:true})
+  .then(gd=>{ gd.on('plotly_click', e=>{ const t=e.points[0].theta; if(P.sectors.includes(t)){ el('decomp-sector').value=t; renderDecomp(t, state.selected); } }); });
+}
+
+function renderDecomp(sector, code){ const i=idxByCode[code];
+  const urban = P.districts[i].urban && sector==='Agriculture';
+  let html = urban?`<div class="alert"><b>Urban.</b> Mostly-urban district — a lower Agriculture score reflects urban land use, not an agricultural-capacity failure.</div>`:'';
+  P.indMeta[sector].forEach(m=>{ const raw=P.indRaw[sector][m.key][i], sc=P.indScore[sector][m.key][i];
+    const rawTxt = raw==null?'—':`${raw} ${m.unit}`, scTxt = sc==null?'—':Math.round(sc);
+    const flag = sc==null?'<span class="chip warn">incomplete</span>':'';
+    html+=`<div class="card"><div class="cardhdr">`
+      +`<div><div class="cname">${m.name} <span class="chip out">${m.dim}</span> ${flag}</div>`
+      +`<div class="muted small">${m.ref_year} · ${m.source}</div></div>`
+      +`<div class="cval"><div class="big">${rawTxt}</div><div class="muted small">score ${scTxt}</div></div></div>`
+      +(raw==null?'<div class="muted small">No value reported for this district.</div>':`<div class="strip" id="strip-${m.key}"></div>`)
+      +`</div>`; });
+  el('decomp').innerHTML=html;
+  P.indMeta[sector].forEach(m=>{ if(P.indRaw[sector][m.key][i]!=null) drawStrip(sector,m,code); });
+}
+
+function drawStrip(sector, m, code){ const i=idxByCode[code], raw=P.indRaw[sector][m.key];
+  const xs=[], ys=[]; raw.forEach((v,j)=>{ if(v!=null){ xs.push(v); ys.push(((j%9)/9-0.5)*0.8); } });
+  const mean = xs.reduce((a,b)=>a+b,0)/xs.length, dark=P.rampDark[sector], thisVal=raw[i];
+  const traces=[{x:xs,y:ys,mode:'markers',type:'scatter',marker:{size:6,color:'#CBD5D5'},hoverinfo:'skip'}];
+  if(thisVal!=null) traces.push({x:[thisVal],y:[0],mode:'markers',type:'scatter',marker:{size:15,color:dark,line:{color:'white',width:2}},hovertemplate:`%{x} ${m.unit}<extra></extra>`});
+  const shapes=[{type:'line',x0:mean,x1:mean,y0:-0.7,y1:0.7,line:{color:'#9AA7B1',dash:'dot',width:1.5}}];
+  const ann=[{x:mean,y:0.72,text:'nat. avg',showarrow:false,font:{size:10},yanchor:'bottom'}];
+  if(m.threshold!=null){ shapes.push({type:'line',x0:m.threshold,x1:m.threshold,y0:-0.7,y1:0.7,line:{color:'#e8a33d',dash:'dash',width:2}}); ann.push({x:m.threshold,y:-0.72,text:'NDP objective',showarrow:false,font:{size:10},yanchor:'top'}); }
+  Plotly.newPlot('strip-'+m.key, traces, {height:110, margin:{l:8,r:8,t:14,b:26}, yaxis:{visible:false,range:[-0.85,0.95]}, xaxis:{title:{text:m.unit,font:{size:10}}, zeroline:false}, shapes, annotations:ann, showlegend:false, plot_bgcolor:'white'}, {displayModeBar:false, responsive:true});
+}
+
+// ---- wiring ----
+function initControls(){
+  el('sector').innerHTML = P.sectors.map(s=>`<option>${s}</option>`).join('');
+  el('decomp-sector').innerHTML = P.sectors.map(s=>`<option>${s}</option>`).join('');
+  el('sector').addEventListener('change', e=>{ state.sector=e.target.value;
+    if(!P.measures[state.sector].includes(state.measure)) state.measure='overall';
+    renderMeasure(); renderSA(); renderSubtitle(); renderMap(); renderList(); });
+  document.querySelectorAll('#measure .seg').forEach(b=>b.addEventListener('click', ()=>{
+    state.measure=b.dataset.m; renderMeasure(); renderSubtitle(); renderMap(); renderList(); }));
+  el('list-body').addEventListener('click', e=>{ const btn=e.target.closest('.row'); if(btn) openDrawer(btn.dataset.code); });
+  el('decomp-sector').addEventListener('change', e=>{ if(state.selected) renderDecomp(e.target.value, state.selected); });
+  el('drawer-x').addEventListener('click', closeDrawer);
+  el('scrim').addEventListener('click', closeDrawer);
+  el('method-btn').addEventListener('click', ()=>el('method').classList.add('open'));
+  el('method-close').addEventListener('click', ()=>el('method').classList.remove('open'));
+  el('method').addEventListener('click', e=>{ if(e.target===el('method')) el('method').classList.remove('open'); });
+  document.addEventListener('keydown', e=>{ if(e.key==='Escape'){ closeDrawer(); el('method').classList.remove('open'); } });
+}
+
+initControls(); renderMeasure(); renderSA(); renderSubtitle(); renderMap(); renderList();
+</script>
+</body>
+</html>
