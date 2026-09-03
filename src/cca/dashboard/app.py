@@ -13,7 +13,7 @@ from dash import Dash
 from sqlalchemy import Engine
 
 from cca.dashboard.callbacks import register_callbacks
-from cca.dashboard.data import build_district_geojson
+from cca.dashboard.data import build_district_geojson, build_district_points
 from cca.dashboard.layout import build_layout
 from cca.grid3.client import District
 from cca.scoring.indicators import CCA_INDICATORS
@@ -32,11 +32,24 @@ def _ordered_sectors() -> list[str]:
 SECTORS = _ordered_sectors()
 
 
+# Ranked-list rows carry an `all:unset` reset (they're semantic <button>s, not
+# styled boxes) plus a hover and a selected accent. Injected once at build time.
+_ROW_CSS = """<style>
+  .rank-row{all:unset;cursor:pointer;display:block;width:100%;padding:6px 8px;border-radius:8px;box-sizing:border-box;}
+  .rank-row:hover{background:#F1F5F5;}
+  .rank-row--selected{background:#EAF1F1;}
+</style></head>"""
+
+
 def build_app(engine: Engine, districts: list[District]) -> Dash:
     districts_df = read_districts(engine)
     geojson = build_district_geojson(districts)
+    district_points = build_district_points(districts)
 
-    app = Dash(__name__)
+    # Ranked-list rows are created inside a callback, not the static layout, so
+    # their pattern-matching `n_clicks` Inputs aren't present at startup.
+    app = Dash(__name__, suppress_callback_exceptions=True)
+    app.index_string = app.index_string.replace("</head>", _ROW_CSS)
     app.layout = build_layout(SECTORS)
-    register_callbacks(app, engine, districts_df, geojson)
+    register_callbacks(app, engine, districts_df, geojson, district_points)
     return app

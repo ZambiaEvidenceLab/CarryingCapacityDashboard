@@ -8,6 +8,11 @@ computed, how Supply/Access aggregate, why scores are relative, and the
 in the header** that opens a drawer; **per-Indicator detail** stays contextual in
 the Decomposition View. Add "guide just enough" affordances and explicit states.
 
+**Reuse from the prototype** (`.scratch/cca-v2/prototype/app.py`): the
+`methodology-drawer` content (including the "On the numbers" average-≠-50
+explainer) and `subtitle_text`. The first-run card, empty/error/loading states,
+and the header-link wiring are new work.
+
 **Blocked by:** 03 (shell), 06 (decomposition, for the contextual per-Indicator
 detail).
 

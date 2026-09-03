@@ -10,13 +10,25 @@ from __future__ import annotations
 import dash_mantine_components as dmc
 from dash import dcc
 
-RIGHT_COLUMN_PLACEHOLDER = dmc.Paper(
+RANKED_LIST_PANEL = dmc.Paper(
     withBorder=True,
     radius="md",
-    p="md",
-    children=dmc.Text(
-        "Ranked district list — coming soon", size="sm", c="dimmed", ta="center"
-    ),
+    p="xs",
+    children=[
+        dmc.Group(
+            justify="space-between",
+            px="xs",
+            pt="xs",
+            children=[
+                dmc.Text("Districts, worst-served first", fw=600, size="sm"),
+                dmc.Text("Sector Index", size="xs", c="dimmed"),
+            ],
+        ),
+        # Rows are rendered by the ranked-list callback (they depend on the
+        # scored run, which the static layout has no access to). Empty here;
+        # the Sector-select callback fills it on first load.
+        dmc.ScrollArea(h=600, children=dmc.Stack(id="ranked-list", gap=4, p="xs")),
+    ],
 )
 
 
@@ -32,7 +44,9 @@ def build_layout(sectors: list[str]) -> dmc.MantineProvider:
 
     return dmc.MantineProvider(
         forceColorScheme="light",
-        children=dmc.AppShell(
+        children=[
+          dcc.Store(id="selected-district"),
+          dmc.AppShell(
             header={"height": 68},
             padding="md",
             children=[
@@ -69,11 +83,12 @@ def build_layout(sectors: list[str]) -> dmc.MantineProvider:
                                         config={"displayModeBar": False},
                                     ),
                                 ),
-                                dmc.GridCol(span=4, children=RIGHT_COLUMN_PLACEHOLDER),
+                                dmc.GridCol(span=4, children=RANKED_LIST_PANEL),
                             ],
                         ),
                     ]
                 ),
             ],
-        ),
+          ),
+        ],
     )

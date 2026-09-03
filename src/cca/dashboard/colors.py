@@ -25,6 +25,11 @@ SECTOR_HUE_ANCHOR: dict[str, str] = {
     "Environment": "#eda100",
 }
 
+# Data-completeness amber (ADR-0017 / spec): the list row's completeness dot and
+# the map's incomplete-District overlay share one hue, distinct from every
+# Sector ramp, so "computed from incomplete Indicators" reads the same in both.
+AMBER = "#E8A33D"
+
 
 def _hex_to_rgb(hex_color: str) -> tuple[float, float, float]:
     hex_color = hex_color.lstrip("#")
@@ -45,3 +50,8 @@ def _build_ramp(anchor_hex: str) -> list[list]:
 
 
 SECTOR_RAMP: dict[str, list[list]] = {sector: _build_ramp(anchor) for sector, anchor in SECTOR_HUE_ANCHOR.items()}
+
+# The dark (high-capacity) end of each Sector's ramp — the ranked list's
+# microbar fill and the selected-District map ring both use it so a row and its
+# District read as the same Sector colour.
+SECTOR_DARK: dict[str, str] = {sector: ramp[-1][1] for sector, ramp in SECTOR_RAMP.items()}

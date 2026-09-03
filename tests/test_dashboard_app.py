@@ -12,6 +12,7 @@ from cca.dashboard.callbacks import (
     compute_decomposition_children,
     compute_map_figure,
     compute_radar_figure,
+    compute_ranked_list,
     compute_subtitle,
     compute_summary_strip,
 )
@@ -28,10 +29,14 @@ from cca.storage.io import (
 
 DISTRICTS = ["D1", "D2", "D3"]
 
+def _square(x: float, y: float) -> dict:
+    return {"type": "Polygon", "coordinates": [[[x, y], [x + 1, y], [x + 1, y + 1], [x, y + 1], [x, y]]]}
+
+
 DISTRICT_RECORDS = [
-    District(code="D1", name="D1 Town", province="P1", province_code="PC1", geometry={"type": "Polygon", "coordinates": []}),
-    District(code="D2", name="D2 Town", province="P1", province_code="PC1", geometry={"type": "Polygon", "coordinates": []}),
-    District(code="D3", name="D3 City", province="P2", province_code="PC2", geometry={"type": "Polygon", "coordinates": []}),
+    District(code="D1", name="D1 Town", province="P1", province_code="PC1", geometry=_square(28.0, -15.0)),
+    District(code="D2", name="D2 Town", province="P1", province_code="PC1", geometry=_square(29.0, -14.0)),
+    District(code="D3", name="D3 City", province="P2", province_code="PC2", geometry=_square(30.0, -13.0)),
 ]
 
 INDICATOR_METAS = [
@@ -41,6 +46,11 @@ INDICATOR_METAS = [
 ]
 
 SECTORS = ["Health", "Environment"]
+
+# Representative points for the map overlays. Hand-built rather than derived from
+# the (empty) test geometries above — the overlay callbacks only need a point
+# per code, and shapely isn't exercised here (it has its own coverage).
+DISTRICT_POINTS = {"D1": (28.0, -14.0), "D2": (29.0, -13.0), "D3": (30.0, -12.0)}
 
 
 def _raw_values() -> pd.DataFrame:
@@ -71,7 +81,7 @@ class TestComputeMapFigure:
         districts_df = read_districts(pg)
         geojson = build_district_geojson(DISTRICT_RECORDS)
 
-        figure = compute_map_figure(pg, districts_df, geojson, "Health")
+        figure = compute_map_figure(pg, districts_df, geojson, DISTRICT_POINTS, "Health")
 
         trace = figure.data[0]
         assert sorted(trace.locations) == DISTRICTS
@@ -81,7 +91,7 @@ class TestComputeMapFigure:
         districts_df = read_districts(pg)
         geojson = build_district_geojson(DISTRICT_RECORDS)
 
-        figure = compute_map_figure(pg, districts_df, geojson, "Health")
+        figure = compute_map_figure(pg, districts_df, geojson, DISTRICT_POINTS, "Health")
 
         assert figure.data[0].type == "choroplethmap"
         assert figure.layout.map.style == "white-bg"
@@ -90,8 +100,8 @@ class TestComputeMapFigure:
         districts_df = read_districts(pg)
         geojson = build_district_geojson(DISTRICT_RECORDS)
 
-        health_figure = compute_map_figure(pg, districts_df, geojson, "Health")
-        environment_figure = compute_map_figure(pg, districts_df, geojson, "Environment")
+        health_figure = compute_map_figure(pg, districts_df, geojson, DISTRICT_POINTS, "Health")
+        environment_figure = compute_map_figure(pg, districts_df, geojson, DISTRICT_POINTS, "Environment")
 
         assert list(health_figure.data[0].colorscale) == [tuple(stop) for stop in SECTOR_RAMP["Health"]]
         assert health_figure.data[0].colorscale != environment_figure.data[0].colorscale
@@ -101,10 +111,71 @@ class TestComputeMapFigure:
         geojson = build_district_geojson(DISTRICT_RECORDS)
         expected_lo, expected_hi = score_range(read_latest_sector_scores(pg, sector="Health"))
 
-        figure = compute_map_figure(pg, districts_df, geojson, "Health")
+        figure = compute_map_figure(pg, districts_df, geojson, DISTRICT_POINTS, "Health")
 
         assert figure.data[0].zmin == pytest.approx(expected_lo)
         assert figure.data[0].zmax == pytest.approx(expected_hi)
+
+
+class TestMapOverlays:
+    def test_incomplete_districts_get_a_completeness_overlay_marker(self, pg):
+        # D3's Health Sector Index is incomplete (its Access Indicator is missing).
+        districts_df = read_districts(pg)
+        geojson = build_district_geojson(DISTRICT_RECORDS)
+
+        figure = compute_map_figure(pg, districts_df, geojson, DISTRICT_POINTS, "Health")
+
+        assert len(figure.data) == 3  # choropleth + selection + completeness overlays
+        completeness = figure.data[2]  # drawn last, on top of the selection halo
+        assert list(completeness.lon) == [DISTRICT_POINTS["D3"][0]]
+        assert list(completeness.lat) == [DISTRICT_POINTS["D3"][1]]
+        assert list(completeness.customdata) == ["D3"]  # click on the dot selects D3
+
+    def test_selection_overlay_is_empty_until_a_district_is_selected(self, pg):
+        districts_df = read_districts(pg)
+        geojson = build_district_geojson(DISTRICT_RECORDS)
+
+        unselected = compute_map_figure(pg, districts_df, geojson, DISTRICT_POINTS, "Health")
+        selected = compute_map_figure(pg, districts_df, geojson, DISTRICT_POINTS, "Health", "D2")
+
+        assert list(unselected.data[1].lon) == []
+        assert list(selected.data[1].lon) == [DISTRICT_POINTS["D2"][0]]
+
+
+class TestComputeRankedList:
+    def test_ranks_scored_districts_worst_served_first(self, pg):
+        districts_df = read_districts(pg)
+
+        rows = compute_ranked_list(pg, districts_df, "Health")
+
+        codes = [row.id["code"] for row in rows]
+        assert set(codes) == set(DISTRICTS)
+        assert codes[0] == "D1"  # lowest Health Sector Index → most underserved → rank 1
+
+    def test_switching_sector_reranks_by_that_sectors_scores(self, pg):
+        districts_df = read_districts(pg)
+
+        environment = [row.id["code"] for row in compute_ranked_list(pg, districts_df, "Environment")]
+
+        # The list re-queries the selected Sector and orders by its own scores
+        # ascending, not Health's.
+        expected = list(
+            read_latest_sector_scores(pg, sector="Environment")
+            .set_index("district_code")["score"]
+            .sort_values()
+            .index
+        )
+        assert environment == expected
+
+    def test_the_selected_row_is_highlighted(self, pg):
+        districts_df = read_districts(pg)
+
+        rows = compute_ranked_list(pg, districts_df, "Health", selected_code="D2")
+
+        selected = next(row for row in rows if row.id["code"] == "D2")
+        other = next(row for row in rows if row.id["code"] == "D1")
+        assert "rank-row--selected" in selected.className
+        assert "rank-row--selected" not in other.className
 
 
 class TestComputeSubtitle:

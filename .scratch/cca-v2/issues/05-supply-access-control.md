@@ -11,6 +11,10 @@ Overall applies. A small **"what's in Supply / Access?" hover** beside the
 control lists the current Sector's Supply and Access Indicators, so a user can
 see what each Dimension contains without opening a District.
 
+**Reuse from the prototype** (`.scratch/cca-v2/prototype/app.py`): the measure
+`Patch()` branch in `_view`, `_measure_availability` (Environment → Overall
+only), and `sa_legend_content` (the Supply/Access hover contents).
+
 **Blocked by:** 03 (map), 04 (list).
 
 **Status:** ready-for-agent

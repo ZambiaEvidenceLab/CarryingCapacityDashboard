@@ -14,6 +14,12 @@ is surfaced against Agriculture specifically.
 (Indicator raw figures + the compare-to-others chart are ticket 07 — this ticket
 delivers the drawer, radar, and the score-level decomposition.)
 
+**Reuse from the prototype** (`.scratch/cca-v2/prototype/app.py`):
+`build_radar_figure`, the `_open_detail` drawer structure (radar + decomposition
+built inline so it shows by default), `_axis_to_sector`, and the score-level part
+of `decomposition_cards`. Replace synthetic reads with the processed-layer
+decomposition read; do not port any scoring.
+
 **Blocked by:** 04 (District selection).
 
 **Status:** ready-for-agent

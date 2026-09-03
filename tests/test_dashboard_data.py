@@ -3,12 +3,14 @@ import pandas as pd
 from cca.dashboard.data import (
     URBAN_AGRICULTURE_ANNOTATION,
     build_district_geojson,
+    build_district_points,
     is_urban_district,
     score_range,
     shape_decomposition,
     shape_map_data,
     shape_national_summary,
     shape_radar_data,
+    shape_ranked_list,
 )
 from cca.grid3.client import District
 
@@ -52,6 +54,65 @@ class TestShapeMapData:
 
         assert pd.isna(merged.loc["D2", "score"])
         assert merged.loc["D2", "completeness_label"] == "Incomplete data"
+
+
+class TestShapeRankedList:
+    SCORES = pd.DataFrame(
+        [
+            {"district_code": "D1", "sector": "Health", "score": 70.0, "complete": True},
+            {"district_code": "D2", "sector": "Health", "score": 30.0, "complete": False},
+        ]
+    )
+
+    def test_ranks_scored_districts_worst_served_first(self):
+        rows = shape_ranked_list(self.SCORES, DISTRICTS_DF)
+
+        # Ascending by score: the lowest (most underserved) District ranks 1.
+        assert [(r["rank"], r["district_code"]) for r in rows] == [(1, "D2"), (2, "D1")]
+
+    def test_each_row_carries_name_score_completeness_and_urban_flag(self):
+        rows = shape_ranked_list(self.SCORES, DISTRICTS_DF)
+        by_code = {r["district_code"]: r for r in rows}
+
+        assert by_code["D2"]["name"] == "D2 City"
+        assert by_code["D2"]["score"] == 30.0
+        assert by_code["D2"]["complete"] is False
+        assert by_code["D2"]["is_urban"] is True
+        assert by_code["D1"]["complete"] is True
+        assert by_code["D1"]["is_urban"] is False
+
+    def test_a_district_with_no_score_for_this_sector_is_excluded(self):
+        # A District absent from the Sector's scores (no Sector Index yet) does
+        # not get a rank — the list is the ranking of *scored* Districts.
+        scores = pd.DataFrame(
+            [{"district_code": "D1", "sector": "Health", "score": 70.0, "complete": True}]
+        )
+
+        rows = shape_ranked_list(scores, DISTRICTS_DF)
+
+        assert [r["district_code"] for r in rows] == ["D1"]
+
+
+class TestBuildDistrictPoints:
+    def test_returns_a_lon_lat_point_inside_each_districts_polygon(self):
+        districts = [
+            District(
+                code="D1",
+                name="D1 Town",
+                province="P1",
+                province_code="PC1",
+                geometry={
+                    "type": "Polygon",
+                    "coordinates": [[[0.0, 0.0], [2.0, 0.0], [2.0, 2.0], [0.0, 2.0], [0.0, 0.0]]],
+                },
+            )
+        ]
+
+        points = build_district_points(districts)
+
+        lon, lat = points["D1"]
+        assert 0.0 < lon < 2.0
+        assert 0.0 < lat < 2.0
 
 
 class TestScoreRange:

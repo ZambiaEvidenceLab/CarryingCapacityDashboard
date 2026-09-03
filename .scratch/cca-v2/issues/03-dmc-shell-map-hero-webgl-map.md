@@ -14,8 +14,13 @@ one-line subtitle states the current Sector and the colour direction/range.
 The map+list+drawer **interaction model** is now validated (map-hero won over
 list-hero / KPI-band in the prototype) — write its ADR as part of this ticket.
 
-The prototype (`.scratch/cca-v2/prototype/app.py`) encodes the trace config,
-per-Sector ramps, dynamic `zmin`/`zmax`, and `Patch()`-based recolour scaffold.
+**Reuse from the prototype** (`.scratch/cca-v2/prototype/app.py`) — lift and
+adapt, don't re-derive: `build_map_figure`, `SECTOR_RAMPS` / `SECTOR_DARK`,
+`z_values`, `z_range`, `subtitle_text`, the `AppShell`/`Grid` layout tree, the
+`.rank-row`/index-string CSS, and the `Patch()` recolour block in `_view`.
+**Replace** the `D.*` synthetic accessors with the processed-layer read paths.
+**Do NOT** copy anything from the prototype's `synthetic.py` scoring/min-max —
+the dashboard reads precomputed scores and performs no calculation (ADR-0010).
 
 **Blocked by:** 01 (deps + simplified boundaries).
 

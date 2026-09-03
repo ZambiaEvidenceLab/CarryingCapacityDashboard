@@ -11,6 +11,7 @@ tested with plain DataFrames.
 from __future__ import annotations
 
 import pandas as pd
+from shapely.geometry import shape
 
 from cca.grid3.client import District
 
@@ -34,6 +35,52 @@ def build_district_geojson(districts: list[District]) -> dict:
             for d in districts
         ],
     }
+
+
+def build_district_points(districts: list[District]) -> dict[str, tuple[float, float]]:
+    """One representative `(lon, lat)` point per District, for map overlay markers.
+
+    Used by the map's Scattermap overlays (data-completeness signal and the
+    selected-District highlight, ticket 04) — `Choroplethmap` colours fills
+    but cannot draw a per-District hatch or ring, so those signals ride a
+    point layer instead. `representative_point()` is guaranteed to fall
+    inside the polygon (unlike a raw centroid, which can land outside a
+    concave or multi-part District). Computed once at app startup on the
+    already-simplified boundaries (ADR-0017), never per page load.
+    """
+    points: dict[str, tuple[float, float]] = {}
+    for d in districts:
+        point = shape(d.geometry).representative_point()
+        points[d.code] = (point.x, point.y)
+    return points
+
+
+def shape_ranked_list(sector_scores: pd.DataFrame, districts: pd.DataFrame) -> list[dict]:
+    """Scored Districts for one Sector, ranked worst-served first (ticket 04).
+
+    Inner-joined to the Sector's scores (not left-joined like the map), so a
+    District with no Sector Index yet simply doesn't appear in the ranking —
+    the list ranks the Districts that actually have a score, cheapest budget
+    question first. Ascending by Sector Index score: rank 1 is the most
+    underserved. Each row carries the name, score, the Data-completeness flag
+    (amber dot when the score used incomplete Indicators) and the Urban flag.
+    """
+    merged = sector_scores.merge(
+        districts[["district_code", "name", "is_urban"]], on="district_code", how="inner"
+    )
+    merged = merged[merged["score"].notna()].sort_values("score", ascending=True)
+
+    return [
+        {
+            "rank": rank,
+            "district_code": row["district_code"],
+            "name": row["name"],
+            "score": float(row["score"]),
+            "complete": bool(row["complete"]),
+            "is_urban": bool(row["is_urban"]),
+        }
+        for rank, (_, row) in enumerate(merged.iterrows(), start=1)
+    ]
 
 
 def shape_map_data(sector_scores: pd.DataFrame, districts: pd.DataFrame) -> pd.DataFrame:

@@ -10,10 +10,13 @@ Plan objective exists for the Indicator, draw it as a line on the same chart (in
 raw units). This shows not just how low a District is, but how low relative to its
 peers and to any national target.
 
-The prototype (`.scratch/cca-v2/prototype/app.py`, `build_compare_fig`) encodes
-the chart shape (highlighted District, national-mean line, objective line). The
-prototype used a jittered strip; a histogram or beeswarm is an acceptable
-substitute once judged against real data.
+**Reuse from the prototype** (`.scratch/cca-v2/prototype/app.py`):
+`build_compare_fig` (highlighted District, national-mean line, objective line)
+and the raw-value part of `decomposition_cards`. Feed them from ticket 02's read
+paths (a District's raw values; the cohort's values for one Indicator) instead of
+the synthetic `D.indicator_rows` / `D.indicator_distribution`. The prototype used
+a jittered strip; a histogram or beeswarm is an acceptable substitute once judged
+against real data.
 
 **Blocked by:** 06 (drawer + decomposition), 02 (raw values available to read).
 
