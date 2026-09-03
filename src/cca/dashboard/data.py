@@ -14,11 +14,66 @@ import pandas as pd
 from shapely.geometry import shape
 
 from cca.grid3.client import District
+from cca.scoring.indicators import CCA_INDICATORS
 
 URBAN_AGRICULTURE_ANNOTATION = (
     "This district is classified as mostly urban. Its lower Agriculture score "
     "reflects urban land use, not a failure of agricultural capacity."
 )
+
+# The Supply/Access segmented control's measures (ticket 05). "Overall" is the
+# Sector Index (dimension IS NULL); "Supply"/"Access" name the Dimension rows
+# verbatim (they double as the `indices.scores.dimension` value read back), so
+# the domain vocabulary carries straight from the DB to the UI label.
+OVERALL, SUPPLY, ACCESS = "Overall", "Supply", "Access"
+MEASURES = [
+    {"label": OVERALL, "value": OVERALL},
+    {"label": SUPPLY, "value": SUPPLY},
+    {"label": ACCESS, "value": ACCESS},
+]
+OVERALL_ONLY = [{"label": OVERALL, "value": OVERALL}]
+
+# Sectors that actually have a Supply/Access split. Environment's Indicators
+# have no Dimension (ADR-0003), so it never has Dimension scores to colour by —
+# derived from the catalog rather than hard-coding "Environment" so a future
+# dimension-less Sector is handled without a code change.
+SECTORS_WITH_DIMENSIONS = frozenset(m.sector for m in CCA_INDICATORS if m.dimension is not None)
+
+
+def effective_measure(sector: str, measure: str | None) -> str:
+    """The measure actually shown, collapsing to Overall where a Dimension can't apply.
+
+    A dimension-less Sector (Environment) has no Supply/Access scores, and a
+    stale/blank measure is meaningless — either resolves to Overall so the map
+    and list stay correct even mid-switch (the control is also reset for
+    Environment, but this guards the data path independently).
+    """
+    if measure in (SUPPLY, ACCESS) and sector in SECTORS_WITH_DIMENSIONS:
+        return measure
+    return OVERALL
+
+
+def indicator_label(indicator_id: str) -> str:
+    """A readable Indicator label from its id (drops the Sector prefix, e.g.
+    'health_doctor_to_population_ratio' -> 'Doctor to population ratio')."""
+    _, _, rest = indicator_id.partition("_")
+    body = rest or indicator_id
+    return body.replace("_", " ").capitalize()
+
+
+def sector_dimension_indicators(sector: str) -> dict[str, list[str]]:
+    """The Sector's Indicator labels grouped by Dimension, for the 'what's in
+    Supply / Access?' hover (ticket 05).
+
+    A dimension-less Sector (Environment) comes back under a single `None` key
+    so the hover can explain that its Indicators average directly, with no
+    Supply/Access split.
+    """
+    grouped: dict[str, list[str]] = {}
+    for meta in CCA_INDICATORS:
+        if meta.sector == sector:
+            grouped.setdefault(meta.dimension, []).append(indicator_label(meta.indicator_id))
+    return grouped
 
 
 def build_district_geojson(districts: list[District]) -> dict:

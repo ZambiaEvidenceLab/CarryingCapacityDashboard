@@ -11,17 +11,20 @@ from cca.dashboard.app import build_app
 from cca.dashboard.callbacks import (
     compute_decomposition_children,
     compute_map_figure,
+    compute_map_measure_patch,
     compute_radar_figure,
     compute_ranked_list,
     compute_subtitle,
     compute_summary_strip,
+    compute_supply_access_legend,
 )
 from cca.dashboard.colors import SECTOR_RAMP
-from cca.dashboard.data import build_district_geojson, score_range
+from cca.dashboard.data import ACCESS, SUPPLY, build_district_geojson, score_range
 from cca.grid3.client import District
 from cca.scoring.engine import IndicatorMeta, run_scoring
 from cca.storage.io import (
     read_districts,
+    read_latest_dimension_scores,
     read_latest_sector_scores,
     write_district_master_list,
     write_scoring_run,
@@ -191,6 +194,102 @@ class TestComputeSubtitle:
         subtitle = compute_subtitle(pg, "Health")
 
         assert f"{lo:.0f}-{hi:.0f}" in subtitle
+
+    def test_names_the_selected_measure(self, pg):
+        assert "Supply" in compute_subtitle(pg, "Health", SUPPLY)
+
+
+class TestMeasureRecolourAndRerank:
+    """The Supply/Access segmented control (ticket 05)."""
+
+    def _map(self, pg, sector, **kwargs):
+        return compute_map_figure(
+            pg, read_districts(pg), build_district_geojson(DISTRICT_RECORDS), DISTRICT_POINTS, sector, **kwargs
+        )
+
+    def test_map_recolours_to_the_dimensions_scores_and_range(self, pg):
+        figure = self._map(pg, "Health", measure=SUPPLY)
+        expected_lo, expected_hi = score_range(read_latest_dimension_scores(pg, "Health", SUPPLY))
+
+        assert figure.data[0].zmin == pytest.approx(expected_lo)
+        assert figure.data[0].zmax == pytest.approx(expected_hi)
+        assert "Supply" in figure.data[0].colorbar.title.text
+
+    def test_a_dimension_keeps_the_sectors_own_hue(self, pg):
+        # Hue identifies the Sector, not the Measure — Supply and Overall share it.
+        overall = self._map(pg, "Health")
+        supply = self._map(pg, "Health", measure=SUPPLY)
+
+        assert supply.data[0].colorscale == overall.data[0].colorscale
+
+    def test_measure_patch_recolours_without_resending_geometry(self, pg):
+        patch = compute_map_measure_patch(pg, read_districts(pg), DISTRICT_POINTS, "Health", SUPPLY)
+
+        locations = [op["location"] for op in patch._operations]
+        assert ["data", 0, "z"] in locations
+        assert ["data", 0, "zmin"] in locations and ["data", 0, "zmax"] in locations
+        # The boundary geometry is never re-attached on a Measure switch (ADR-0017
+        # lever 3), and the selection halo (trace 1) is left untouched.
+        assert all("geojson" not in location for location in locations)
+        assert all(location[1] != 1 for location in locations)
+
+    def test_completeness_overlay_tracks_the_displayed_measure(self, pg):
+        # Deliberate deviation from the prototype's z-only Patch: per-Dimension
+        # completeness genuinely differs, so the amber overlay must follow the
+        # shown score. Health's Sector Index flags D3 (its Access Indicator is
+        # missing), but the Supply Dimension (doctor ratio) is complete for all,
+        # so switching to Supply must clear the overlay rather than leave D3's dot.
+        overall = self._map(pg, "Health")
+        assert list(overall.data[2].customdata) == ["D3"]
+
+        supply_patch = compute_map_measure_patch(pg, read_districts(pg), DISTRICT_POINTS, "Health", SUPPLY)
+        overlay = {
+            tuple(op["location"]): op["params"]["value"]
+            for op in supply_patch._operations
+            if op["location"][:2] == ["data", 2]
+        }
+        assert overlay[("data", 2, "customdata")] == []
+        assert overlay[("data", 2, "lat")] == [] and overlay[("data", 2, "lon")] == []
+
+    def test_supply_access_reranks_the_list_by_that_dimension(self, pg):
+        access_rows = compute_ranked_list(pg, read_districts(pg), "Health", measure=ACCESS)
+
+        codes = [row.id["code"] for row in access_rows]
+        # D3 has no Access Indicator, so it drops out of the Access ranking
+        # (present in the Overall ranking, which ranks all three).
+        assert set(codes) == {"D1", "D2"}
+        expected = list(
+            read_latest_dimension_scores(pg, "Health", ACCESS)
+            .dropna(subset=["score"])
+            .set_index("district_code")["score"]
+            .sort_values()
+            .index
+        )
+        assert codes == expected
+
+    def test_environment_collapses_a_dimension_measure_to_overall(self, pg):
+        # Environment has no Supply/Access scores (ADR-0003); a stale Dimension
+        # measure must fall back to the Sector Index, not blank the view.
+        env_map = self._map(pg, "Environment", measure=SUPPLY)
+        assert env_map.data[0].colorbar.title.text == "Environment Index"
+
+        supply_codes = [r.id["code"] for r in compute_ranked_list(pg, read_districts(pg), "Environment", measure=SUPPLY)]
+        overall_codes = [r.id["code"] for r in compute_ranked_list(pg, read_districts(pg), "Environment")]
+        assert supply_codes == overall_codes
+
+
+class TestSaLegendContent:
+    def test_split_sector_legend_has_a_supply_and_an_access_column(self):
+        legend = compute_supply_access_legend("Health")
+
+        headings = [column.children[0].children for column in legend.children]
+        assert headings == [SUPPLY, ACCESS]
+
+    def test_dimensionless_sector_legend_notes_the_no_split_case(self):
+        legend = compute_supply_access_legend("Environment")
+
+        note = legend.children[0].children
+        assert "average directly" in note
 
 
 class TestComputeSummaryStrip:

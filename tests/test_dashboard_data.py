@@ -1,11 +1,17 @@
 import pandas as pd
 
 from cca.dashboard.data import (
+    ACCESS,
+    OVERALL,
+    SUPPLY,
     URBAN_AGRICULTURE_ANNOTATION,
     build_district_geojson,
     build_district_points,
+    effective_measure,
+    indicator_label,
     is_urban_district,
     score_range,
+    sector_dimension_indicators,
     shape_decomposition,
     shape_map_data,
     shape_national_summary,
@@ -226,3 +232,41 @@ class TestIsUrbanDistrict:
 
 def test_urban_annotation_text_mentions_agriculture():
     assert "Agriculture" in URBAN_AGRICULTURE_ANNOTATION
+
+
+class TestEffectiveMeasure:
+    def test_keeps_a_dimension_for_a_sector_that_has_dimensions(self):
+        assert effective_measure("Health", SUPPLY) == SUPPLY
+        assert effective_measure("Health", ACCESS) == ACCESS
+
+    def test_collapses_a_dimension_to_overall_for_a_dimensionless_sector(self):
+        # Environment has no Supply/Access split (ADR-0003), so a Dimension
+        # measure can't apply — it resolves to Overall (the Sector Index).
+        assert effective_measure("Environment", SUPPLY) == OVERALL
+
+    def test_a_blank_or_overall_measure_stays_overall(self):
+        assert effective_measure("Health", None) == OVERALL
+        assert effective_measure("Health", OVERALL) == OVERALL
+
+
+class TestIndicatorLabel:
+    def test_drops_the_sector_prefix_and_humanises(self):
+        assert indicator_label("health_doctor_to_population_ratio") == "Doctor to population ratio"
+
+    def test_handles_an_id_without_an_underscore(self):
+        assert indicator_label("forest") == "Forest"
+
+
+class TestSectorDimensionIndicators:
+    def test_groups_a_sectors_indicators_by_supply_and_access(self):
+        grouped = sector_dimension_indicators("Health")
+
+        assert set(grouped) == {SUPPLY, ACCESS}
+        assert "Doctor to population ratio" in grouped[SUPPLY]
+        assert "Distance to nearest facility" in grouped[ACCESS]
+
+    def test_a_dimensionless_sector_groups_under_a_single_none_key(self):
+        grouped = sector_dimension_indicators("Environment")
+
+        assert set(grouped) == {None}
+        assert "Forest cover" in grouped[None]

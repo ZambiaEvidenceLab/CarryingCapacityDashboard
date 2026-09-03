@@ -188,6 +188,25 @@ def read_latest_sector_scores(engine: Engine, sector: str | None = None) -> pd.D
         return pd.read_sql(text(query), conn, params=params)
 
 
+def read_latest_dimension_scores(engine: Engine, sector: str, dimension: str) -> pd.DataFrame:
+    """One Dimension's (Supply/Access) scores for a Sector from the current run (ADR-0010).
+
+    Same shape as `read_latest_sector_scores`, but the Dimension rows
+    (`dimension = 'Supply' | 'Access'`) rather than the Sector Index row
+    (`dimension IS NULL`) — so the map/list can recolour and re-rank to a
+    Dimension without re-deriving anything (ticket 05). Environment has no
+    Dimension rows (ADR-0003), so this comes back empty for it; callers force
+    Overall for the dimension-less Sector rather than querying here.
+    """
+    query = (
+        "SELECT s.district_code, s.sector, s.score, s.complete, s.n_used, s.n_total "
+        f"FROM indices.scores s {_CURRENT_RUN_JOIN.format(alias='s')} "
+        "WHERE r.is_current = true AND s.sector = :sector AND s.dimension = :dimension"
+    )
+    with engine.connect() as conn:
+        return pd.read_sql(text(query), conn, params={"sector": sector, "dimension": dimension})
+
+
 def read_district_decomposition(engine: Engine, district_code: str, sector: str) -> dict[str, pd.DataFrame]:
     """Dimension and Indicator scores behind one district's current Sector Index (Decomposition View)."""
     with engine.connect() as conn:

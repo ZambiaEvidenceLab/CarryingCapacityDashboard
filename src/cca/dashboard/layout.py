@@ -10,6 +10,8 @@ from __future__ import annotations
 import dash_mantine_components as dmc
 from dash import dcc
 
+from cca.dashboard.data import MEASURES, OVERALL
+
 RANKED_LIST_PANEL = dmc.Paper(
     withBorder=True,
     radius="md",
@@ -42,6 +44,40 @@ def build_layout(sectors: list[str]) -> dmc.MantineProvider:
         w=220,
     )
 
+    # Overall · Supply · Access — recolours the map and re-ranks the list to the
+    # chosen Dimension (ticket 05). `data` and `value` are reset by the
+    # measure-control callback (Overall-only for a dimension-less Sector); the
+    # `sa-legend` hover lists the current Sector's Supply/Access Indicators, also
+    # filled by that callback. Both start empty and are populated on first load.
+    measure_control = dmc.Stack(
+        gap=2,
+        children=[
+            dmc.Group(
+                gap=4,
+                children=[
+                    dmc.Text("Measure", size="sm", fw=500),
+                    dmc.HoverCard(
+                        withArrow=True,
+                        width=340,
+                        shadow="md",
+                        children=[
+                            dmc.HoverCardTarget(
+                                dmc.Text(
+                                    "ⓘ what's in Supply / Access?",
+                                    size="xs",
+                                    c="blue",
+                                    style={"cursor": "help"},
+                                )
+                            ),
+                            dmc.HoverCardDropdown(id="sa-legend", children=[]),
+                        ],
+                    ),
+                ],
+            ),
+            dmc.SegmentedControl(id="measure", data=MEASURES, value=OVERALL),
+        ],
+    )
+
     return dmc.MantineProvider(
         forceColorScheme="light",
         children=[
@@ -70,7 +106,7 @@ def build_layout(sectors: list[str]) -> dmc.MantineProvider:
                 ),
                 dmc.AppShellMain(
                     children=[
-                        sector_select,
+                        dmc.Group(align="flex-end", gap="lg", children=[sector_select, measure_control]),
                         dmc.Grid(
                             gutter="md",
                             mt="md",
