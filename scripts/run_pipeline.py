@@ -8,9 +8,13 @@ webhook.
     .venv/Scripts/python.exe scripts/run_pipeline.py \\
         --file path/to/submission.csv --sector Health --submitter mofnp
 
-Reads the database connection string from `CCA_DATABASE_URL` and the GRID3
+Reads the database connection string from `CCA_DATABASE_URL`, the GRID3
 cache path from `CCA_GRID3_CACHE_PATH` (defaults to
-`scripts/.grid3_districts_cache.json`, matching `inspect_synthetic.py`).
+`scripts/.grid3_districts_cache.json`, matching `inspect_synthetic.py`), and
+the simplified-boundary cache path from `CCA_GRID3_SIMPLIFIED_CACHE_PATH`
+(defaults to `scripts/.grid3_districts_simplified_cache.json`, matching
+`run_dashboard.py`). Boundary simplification (ADR-0017) runs here, at the
+data-refresh cycle, so the dashboard never has to.
 """
 
 import argparse
@@ -21,11 +25,13 @@ from pathlib import Path
 from sqlalchemy import create_engine
 
 from cca.grid3.client import fetch_district_master_list
+from cca.grid3.simplify import ensure_simplified_boundary_cache
 from cca.pipeline.run import run_validation_and_publish
 from cca.storage.io import write_district_master_list
 from cca.storage.schema import create_all
 
 DEFAULT_GRID3_CACHE_PATH = Path(__file__).parent / ".grid3_districts_cache.json"
+DEFAULT_GRID3_SIMPLIFIED_CACHE_PATH = Path(__file__).parent / ".grid3_districts_simplified_cache.json"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -37,6 +43,9 @@ def main(argv: list[str] | None = None) -> int:
 
     database_url = os.environ["CCA_DATABASE_URL"]
     grid3_cache_path = Path(os.environ.get("CCA_GRID3_CACHE_PATH", DEFAULT_GRID3_CACHE_PATH))
+    grid3_simplified_cache_path = Path(
+        os.environ.get("CCA_GRID3_SIMPLIFIED_CACHE_PATH", DEFAULT_GRID3_SIMPLIFIED_CACHE_PATH)
+    )
 
     engine = create_engine(database_url)
     create_all(engine)
@@ -44,6 +53,7 @@ def main(argv: list[str] | None = None) -> int:
     # Every score/indicator-value row is foreign-keyed to metadata.districts
     # (schema.py) -- keep it in sync with the GRID3 master list on every run.
     write_district_master_list(engine, districts)
+    ensure_simplified_boundary_cache(districts, grid3_simplified_cache_path)
 
     result = run_validation_and_publish(
         engine, args.file, sector=args.sector, submitter=args.submitter, districts=districts

@@ -51,6 +51,26 @@ def parse_feature_collection(geojson: dict) -> list[District]:
     ]
 
 
+def _to_feature_collection(districts: list[District]) -> dict:
+    """The GRID3-shaped GeoJSON FeatureCollection form of `districts` (round-trips via `parse_feature_collection`)."""
+    return {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {
+                    "DISTRICT": d.name,
+                    "DIST_CODE": d.code,
+                    "PROVINCE": d.province,
+                    "PROV_CODE": d.province_code,
+                },
+                "geometry": d.geometry,
+            }
+            for d in districts
+        ],
+    }
+
+
 def _fetch_geojson_from_grid3() -> dict:
     response = requests.get(FEATURESERVER_URL, timeout=30)
     response.raise_for_status()
@@ -83,3 +103,16 @@ def fetch_district_master_list(
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     cache_path.write_text(json.dumps(geojson))
     return districts
+
+
+def write_simplified_boundary_cache(districts: list[District], cache_path: str | Path) -> None:
+    """Write `districts` (already simplified) to their own cache file, alongside
+    the full-resolution GRID3 cache (ADR-0017)."""
+    cache_path = Path(cache_path)
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    cache_path.write_text(json.dumps(_to_feature_collection(districts)))
+
+
+def read_simplified_district_boundaries(cache_path: str | Path) -> list[District]:
+    """Read the simplified boundary set the dashboard renders the map from."""
+    return parse_feature_collection(json.loads(Path(cache_path).read_text()))

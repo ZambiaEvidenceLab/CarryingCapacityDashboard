@@ -2,7 +2,13 @@ import json
 
 import pytest
 
-from cca.grid3.client import District, fetch_district_master_list, parse_feature_collection
+from cca.grid3.client import (
+    District,
+    fetch_district_master_list,
+    parse_feature_collection,
+    read_simplified_district_boundaries,
+    write_simplified_boundary_cache,
+)
 
 DISTRICT_COUNT = 116
 
@@ -113,3 +119,27 @@ class TestDistrictHashing:
     def test_districts_are_hashable_despite_the_geometry_dict_field(self):
         district = parse_feature_collection(_sample_geojson(n=1))[0]
         assert {district} == {district}
+
+
+class TestSimplifiedBoundaryCache:
+    def test_write_then_read_round_trips_identity_fields_and_geometry(self, tmp_path):
+        districts = parse_feature_collection(_sample_geojson(n=3))
+        cache_path = tmp_path / "grid3_districts_simplified.json"
+
+        write_simplified_boundary_cache(districts, cache_path)
+        read_back = read_simplified_district_boundaries(cache_path)
+
+        assert len(read_back) == 3
+        assert {d.code for d in read_back} == {d.code for d in districts}
+        by_code = {d.code: d for d in read_back}
+        assert by_code["D000"].name == "District 0"
+        assert by_code["D000"].province == "Province 0"
+        assert by_code["D000"].geometry == districts[0].geometry
+
+    def test_write_creates_missing_parent_directories(self, tmp_path):
+        districts = parse_feature_collection(_sample_geojson(n=1))
+        cache_path = tmp_path / "nested" / "dir" / "grid3_districts_simplified.json"
+
+        write_simplified_boundary_cache(districts, cache_path)
+
+        assert cache_path.exists()
