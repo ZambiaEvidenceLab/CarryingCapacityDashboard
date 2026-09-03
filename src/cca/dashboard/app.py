@@ -51,5 +51,5 @@ def build_app(engine: Engine, districts: list[District]) -> Dash:
     app = Dash(__name__, suppress_callback_exceptions=True)
     app.index_string = app.index_string.replace("</head>", _ROW_CSS)
     app.layout = build_layout(SECTORS)
-    register_callbacks(app, engine, districts_df, geojson, district_points)
+    register_callbacks(app, engine, districts_df, geojson, district_points, SECTORS)
     return app

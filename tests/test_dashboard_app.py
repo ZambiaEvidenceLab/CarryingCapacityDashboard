@@ -4,11 +4,13 @@ just enough to confirm the wiring works end to end against Postgres -- the
 scoring math itself is covered by test_scoring_engine.py, not duplicated here.
 """
 
+import dash_mantine_components as dmc
 import pandas as pd
 import pytest
 
 from cca.dashboard.app import build_app
 from cca.dashboard.callbacks import (
+    _district_title,
     compute_decomposition_children,
     compute_map_figure,
     compute_map_measure_patch,
@@ -27,8 +29,25 @@ from cca.storage.io import (
     read_latest_dimension_scores,
     read_latest_sector_scores,
     write_district_master_list,
+    write_indicator_metadata,
     write_scoring_run,
 )
+
+
+def _flatten_text(node) -> list[str]:
+    """Every string appearing in a component tree's `children`, depth-first —
+    lets a test assert on rendered text without pinning the exact nesting."""
+    texts: list[str] = []
+    if isinstance(node, (list, tuple)):
+        for item in node:
+            texts.extend(_flatten_text(item))
+        return texts
+    children = getattr(node, "children", None)
+    if isinstance(children, str):
+        texts.append(children)
+    elif children is not None:
+        texts.extend(_flatten_text(children))
+    return texts
 
 DISTRICTS = ["D1", "D2", "D3"]
 
@@ -76,6 +95,20 @@ def _raw_values() -> pd.DataFrame:
 def pg(clean_pg):
     write_district_master_list(clean_pg, DISTRICT_RECORDS, urban_district_names=frozenset({"D3 City"}))
     write_scoring_run(clean_pg, run_scoring(_raw_values(), INDICATOR_METAS, DISTRICTS), INDICATOR_METAS)
+    write_indicator_metadata(
+        clean_pg,
+        INDICATOR_METAS,
+        reference_years={
+            "health_doctor_to_population_ratio": 2021,
+            "health_distance_to_nearest_facility": 2020,
+            "environment_forest_cover": 2019,
+        },
+        data_sources={
+            "health_doctor_to_population_ratio": "MoH HR",
+            "health_distance_to_nearest_facility": "GRID3",
+            "environment_forest_cover": "MoL",
+        },
+    )
     return clean_pg
 
 
@@ -310,21 +343,72 @@ class TestComputeRadarFigure:
 
 
 class TestComputeDecompositionChildren:
-    def test_health_sector_includes_dimension_and_indicator_tables(self, pg):
-        children = compute_decomposition_children(pg, "D1", "Health")
+    def test_health_shows_dimension_and_indicator_scores(self, pg):
+        texts = _flatten_text(compute_decomposition_children(pg, "D1", "Health"))
 
-        table_data = [c.data for c in children if hasattr(c, "data")]
-        assert any(row.get("dimension") == "Supply" for rows in table_data for row in rows)
-        assert any(row.get("indicator_id") == "health_doctor_to_population_ratio" for rows in table_data for row in rows)
+        assert "Dimension scores" in texts and "Indicator scores" in texts
+        assert SUPPLY in texts and ACCESS in texts  # the two Dimension rows
+        assert "Doctor to population ratio" in texts  # humanised Indicator label
 
-    def test_environment_sector_has_no_dimension_table_only_indicators(self, pg):
-        children = compute_decomposition_children(pg, "D1", "Environment")
+    def test_indicator_cards_show_reference_year_and_data_source(self, pg):
+        texts = _flatten_text(compute_decomposition_children(pg, "D1", "Health"))
 
-        headings = [c.children for c in children if hasattr(c, "children") and isinstance(c.children, str)]
-        assert "Dimension scores" not in headings
+        assert any("2021" in text and "MoH HR" in text for text in texts)  # "2021 · MoH HR"
 
-        table_data = [c.data for c in children if hasattr(c, "data")]
-        assert any(row.get("indicator_id") == "environment_forest_cover" for rows in table_data for row in rows)
+    def test_environment_has_no_dimension_section_only_indicators(self, pg):
+        texts = _flatten_text(compute_decomposition_children(pg, "D1", "Environment"))
+
+        assert "Dimension scores" not in texts
+        assert "Indicator scores" in texts
+        assert "Forest cover" in texts
+
+    def test_an_incomplete_dimension_is_flagged(self, pg):
+        # D3's Health Access Dimension is missing its only Indicator, so the
+        # Dimension score is computed from incomplete Indicators.
+        texts = _flatten_text(compute_decomposition_children(pg, "D3", "Health"))
+
+        assert "incomplete" in texts
+
+    def test_an_incomplete_sector_index_shows_a_completeness_alert(self, pg):
+        # D3's Health Sector Index is incomplete (its Access Indicator is missing)
+        # — the drawer must flag it so a dark-but-incomplete score isn't trusted.
+        titles = _alert_titles(compute_decomposition_children(pg, "D3", "Health"))
+
+        assert "Incomplete data" in titles
+
+    def test_a_complete_sector_index_has_no_completeness_alert(self, pg):
+        titles = _alert_titles(compute_decomposition_children(pg, "D1", "Health"))
+
+        assert "Incomplete data" not in titles
+
+
+def _alert_titles(children) -> list[str]:
+    return [child.title for child in children if isinstance(child, dmc.Alert)]
+
+
+class TestDecompositionUrbanNote:
+    def test_urban_district_decomposing_agriculture_gets_the_land_use_note(self, pg):
+        titles = _alert_titles(compute_decomposition_children(pg, "D3", "Agriculture", is_urban=True))
+
+        assert "Urban land use" in titles
+
+    def test_note_absent_for_a_non_agriculture_sector(self, pg):
+        titles = _alert_titles(compute_decomposition_children(pg, "D3", "Health", is_urban=True))
+
+        assert "Urban land use" not in titles
+
+    def test_note_absent_for_a_non_urban_district(self, pg):
+        titles = _alert_titles(compute_decomposition_children(pg, "D1", "Agriculture", is_urban=False))
+
+        assert "Urban land use" not in titles
+
+
+class TestDistrictTitle:
+    def test_formats_name_and_province(self, pg):
+        assert _district_title(read_districts(pg), "D3") == "D3 City · P2"
+
+    def test_falls_back_to_the_code_when_unknown(self, pg):
+        assert _district_title(read_districts(pg), "NOPE") == "NOPE"
 
 
 class TestBuildApp:

@@ -218,6 +218,23 @@ class TestShapeDecomposition:
         assert len(shaped["dimensions"]) == 2
         assert len(shaped["indicators"]) == 1
 
+    def test_reads_the_sector_index_completeness_flag(self):
+        breakdown = {
+            "dimensions": pd.DataFrame(columns=["dimension", "score", "complete"]),
+            "indicator_values": pd.DataFrame(columns=["indicator_id", "value"]),
+            "sector_index": pd.DataFrame([{"score": 40.0, "complete": False}]),
+        }
+
+        assert shape_decomposition("D1", "Health", breakdown)["sector_complete"] is False
+
+    def test_sector_complete_defaults_true_when_the_sector_index_row_is_absent(self):
+        breakdown = {
+            "dimensions": pd.DataFrame(columns=["dimension", "score", "complete"]),
+            "indicator_values": pd.DataFrame(columns=["indicator_id", "value"]),
+        }
+
+        assert shape_decomposition("D1", "Health", breakdown)["sector_complete"] is True
+
 
 class TestIsUrbanDistrict:
     def test_true_for_a_flagged_district(self):

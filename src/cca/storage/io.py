@@ -208,7 +208,13 @@ def read_latest_dimension_scores(engine: Engine, sector: str, dimension: str) ->
 
 
 def read_district_decomposition(engine: Engine, district_code: str, sector: str) -> dict[str, pd.DataFrame]:
-    """Dimension and Indicator scores behind one district's current Sector Index (Decomposition View)."""
+    """Dimension and Indicator scores behind one district's current Sector Index (Decomposition View).
+
+    Also returns the Sector Index row itself (`sector_index`, the `dimension IS
+    NULL` score) so the drawer can flag an incomplete Sector Index even for a
+    dimension-less Sector (Environment, ADR-0003), which has no Dimension rows to
+    carry the completeness signal.
+    """
     with engine.connect() as conn:
         dimensions = pd.read_sql(
             text(
@@ -216,6 +222,16 @@ def read_district_decomposition(engine: Engine, district_code: str, sector: str)
                 f"FROM indices.scores s {_CURRENT_RUN_JOIN.format(alias='s')} "
                 "WHERE r.is_current = true AND s.district_code = :district_code "
                 "AND s.sector = :sector AND s.dimension IS NOT NULL"
+            ),
+            conn,
+            params={"district_code": district_code, "sector": sector},
+        )
+        sector_index = pd.read_sql(
+            text(
+                "SELECT s.score, s.complete, s.n_used, s.n_total "
+                f"FROM indices.scores s {_CURRENT_RUN_JOIN.format(alias='s')} "
+                "WHERE r.is_current = true AND s.district_code = :district_code "
+                "AND s.sector = :sector AND s.dimension IS NULL"
             ),
             conn,
             params={"district_code": district_code, "sector": sector},
@@ -232,7 +248,7 @@ def read_district_decomposition(engine: Engine, district_code: str, sector: str)
             conn,
             params={"district_code": district_code, "sector": sector},
         )
-    return {"dimensions": dimensions, "indicator_values": indicator_values}
+    return {"dimensions": dimensions, "indicator_values": indicator_values, "sector_index": sector_index}
 
 
 def read_indicator_cohort_values(engine: Engine, indicator_id: str) -> pd.DataFrame:

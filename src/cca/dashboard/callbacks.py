@@ -10,7 +10,8 @@ layer that wires them to Dash `Input`/`Output`s.
 from __future__ import annotations
 
 import dash_mantine_components as dmc
-from dash import ALL, Dash, Input, Output, Patch, State, ctx, dash_table, html
+import pandas as pd
+from dash import ALL, Dash, Input, Output, Patch, State, ctx, html
 from dash.exceptions import PreventUpdate
 from plotly import graph_objects as go
 from sqlalchemy import Engine
@@ -23,7 +24,10 @@ from cca.dashboard.data import (
     SECTORS_WITH_DIMENSIONS,
     SUPPLY,
     ACCESS,
+    URBAN_AGRICULTURE_ANNOTATION,
     effective_measure,
+    indicator_label,
+    is_urban_district,
     score_range,
     sector_dimension_indicators,
     shape_decomposition,
@@ -54,6 +58,11 @@ MAP_ZOOM = 4.7
 _CHOROPLETH_TRACE = 0
 _SELECTION_TRACE = 1
 _COMPLETENESS_TRACE = 2
+
+# The Sector whose low scores an Urban District's land use explains (CONTEXT.md).
+# The land-use note is surfaced only when *this* Sector is decomposed (spec.md:
+# contextual, not always-on noise), so the name is matched here by constant.
+AGRICULTURE = "Agriculture"
 
 
 def _overlay_points(district_points: dict, codes) -> tuple[list[float], list[float]]:
@@ -354,41 +363,130 @@ def compute_radar_figure(engine: Engine, sectors: list[str], district_code: str)
     return fig
 
 
-def compute_decomposition_children(engine: Engine, district_code: str, sector: str) -> list:
+def _score_text(score) -> str:
+    """A 0-100 score as a whole number, or an em dash when it's absent."""
+    return "—" if score is None or pd.isna(score) else f"{float(score):.0f}"
+
+
+def _incomplete_badge(complete: bool):
+    """A small 'incomplete' badge when a score used incomplete Indicators."""
+    if complete:
+        return None
+    return dmc.Badge("incomplete", size="xs", color="yellow", variant="light")
+
+
+def _dimension_row(row: dict):
+    """One Dimension (Supply/Access) score line: name, incomplete flag, score."""
+    return dmc.Group(
+        justify="space-between",
+        children=[
+            dmc.Group(
+                gap="xs",
+                children=[dmc.Text(row["dimension"], size="sm", fw=500), _incomplete_badge(row["complete"])],
+            ),
+            dmc.Text(_score_text(row["score"]), size="sm", fw=700),
+        ],
+    )
+
+
+def _indicator_meta_line(row: dict) -> str:
+    """'reference year · data source', dropping either part when it's not set."""
+    year = row.get("reference_year")
+    parts = []
+    if pd.notna(year):
+        parts.append(str(int(year)))
+    if pd.notna(row.get("data_source")):
+        parts.append(str(row["data_source"]))
+    return " · ".join(parts)
+
+
+def _indicator_card(row: dict):
+    """One Indicator's score-level card: label (+ Dimension badge), its reference
+    year and data source, and the 0-100 normalised score. The raw value and the
+    compare-to-others chart are ticket 07 — this card is the score-level view."""
+    dimension = row.get("dimension")
+    dim_badge = (
+        dmc.Badge(dimension, size="xs", variant="outline", color="gray") if pd.notna(dimension) else None
+    )
+    meta_line = _indicator_meta_line(row)
+    return dmc.Paper(
+        withBorder=True,
+        radius="md",
+        p="sm",
+        children=dmc.Group(
+            justify="space-between",
+            align="flex-start",
+            wrap="nowrap",
+            children=[
+                dmc.Stack(
+                    gap=2,
+                    children=[
+                        dmc.Group(
+                            gap="xs",
+                            children=[dmc.Text(indicator_label(row["indicator_id"]), fw=600, size="sm"), dim_badge],
+                        ),
+                        dmc.Text(meta_line, size="xs", c="dimmed") if meta_line else None,
+                    ],
+                ),
+                dmc.Text(_score_text(row.get("value")), fw=700, size="md"),
+            ],
+        ),
+    )
+
+
+def compute_decomposition_children(
+    engine: Engine, district_code: str, sector: str, is_urban: bool = False
+) -> list:
+    """The score-level Decomposition View for one District and Sector (ticket 06).
+
+    Shows the Sector's Dimension scores (Supply/Access) and its per-Indicator
+    normalised scores with each Indicator's reference year, data source, and a
+    completeness flag where a score is incomplete. Environment has no Dimensions
+    (ADR-0003), so the Dimension section is omitted and Indicators sit directly
+    under the Sector Index. A mostly-urban District decomposing Agriculture gets
+    the land-use note, surfaced only in that context (spec.md)."""
     breakdown = read_district_decomposition(engine, district_code, sector)
     shaped = shape_decomposition(district_code, sector, breakdown)
 
-    children = []
-    if shaped["dimensions"]:
-        children.append(html.H4("Dimension scores"))
+    children: list = []
+    if is_urban and sector == AGRICULTURE:
         children.append(
-            dash_table.DataTable(
-                columns=[
-                    {"name": "Dimension", "id": "dimension"},
-                    {"name": "Score", "id": "score"},
-                    {"name": "Complete", "id": "complete"},
-                ],
-                data=shaped["dimensions"],
+            dmc.Alert(URBAN_AGRICULTURE_ANNOTATION, title="Urban land use", color="gray", variant="light")
+        )
+
+    # A Sector-level completeness flag, so a dark-but-incomplete District is not
+    # read as a confident score (spec.md). Placed here because Environment has no
+    # Dimension rows to carry the per-Dimension flag below (ADR-0003).
+    if not shaped["sector_complete"]:
+        children.append(
+            dmc.Alert(
+                "This Sector Index is computed from incomplete Indicators — some are missing "
+                "for this District. Treat it with caution.",
+                title="Incomplete data",
+                color="yellow",
+                variant="light",
             )
         )
 
-    children.append(html.H4("Indicator scores"))
-    children.append(
-        dash_table.DataTable(
-            columns=[
-                {"name": "Indicator", "id": "indicator_id"},
-                {"name": "Value", "id": "value"},
-                {"name": "Reference year", "id": "reference_year"},
-                {"name": "Data source", "id": "data_source"},
-            ],
-            data=shaped["indicators"],
-        )
-    )
+    if shaped["dimensions"]:
+        children.append(dmc.Text("Dimension scores", fw=600, size="sm"))
+        children.append(dmc.Stack(gap="xs", children=[_dimension_row(row) for row in shaped["dimensions"]]))
+
+    children.append(dmc.Text("Indicator scores", fw=600, size="sm"))
+    children.append(dmc.Stack(gap="sm", children=[_indicator_card(row) for row in shaped["indicators"]]))
     return children
 
 
+def _district_title(districts_df, district_code: str) -> str:
+    """'<name> · <province>' for the drawer header, or the bare code if unknown."""
+    row = districts_df.loc[districts_df["district_code"] == district_code]
+    if row.empty:
+        return district_code
+    return f"{row.iloc[0]['name']} · {row.iloc[0]['province']}"
+
+
 def register_callbacks(
-    app: Dash, engine: Engine, districts_df, geojson: dict, district_points: dict
+    app: Dash, engine: Engine, districts_df, geojson: dict, district_points: dict, sectors: list[str]
 ) -> None:
     @app.callback(
         Output("measure", "data"),
@@ -492,3 +590,54 @@ def register_callbacks(
         patched["data"][_SELECTION_TRACE]["lat"] = lats
         patched["data"][_SELECTION_TRACE]["lon"] = lons
         return patched
+
+    @app.callback(
+        Output("detail-drawer", "opened"),
+        Output("drawer-title", "children"),
+        Output("drawer-urban-note", "children"),
+        Output("radar", "figure"),
+        Output("drawer-sector", "value"),
+        Input("selected-district", "data"),
+        State("sector-select", "value"),
+        prevent_initial_call=True,
+    )
+    def _open_district_drawer(selected_code, sector):
+        # Selecting a District slides the drawer in over the scan (ticket 06). It
+        # sets the radar and the decomposed-Sector Select to the Sector on the map;
+        # setting that value drives `_render_decomposition`, so the Decomposition
+        # View shows immediately with no second click. The scan underneath keeps
+        # its selection — closing the drawer (DMC's own close) never clears it.
+        if not selected_code:
+            raise PreventUpdate
+        urban = is_urban_district(districts_df, selected_code)
+        urban_chip = dmc.Badge("Urban", size="sm", variant="light", color="gray") if urban else None
+        radar = compute_radar_figure(engine, sectors, selected_code)
+        return True, _district_title(districts_df, selected_code), urban_chip, radar, sector
+
+    @app.callback(
+        Output("drawer-sector", "value", allow_duplicate=True),
+        Input("radar", "clickData"),
+        prevent_initial_call=True,
+    )
+    def _axis_to_decomposed_sector(click_data):
+        # Clicking a radar axis switches which Sector the decomposition covers —
+        # the axis label is a Sector name, so it feeds straight into the Select.
+        theta = (click_data or {}).get("points", [{}])[0].get("theta")
+        if theta not in sectors:
+            raise PreventUpdate
+        return theta
+
+    @app.callback(
+        Output("decomp-content", "children"),
+        Input("drawer-sector", "value"),
+        Input("selected-district", "data"),
+        prevent_initial_call=True,
+    )
+    def _render_decomposition(sector, selected_code):
+        # Re-renders whenever the decomposed Sector changes (radar axis or the
+        # in-drawer Select) or a new District is picked. Both are Inputs so a
+        # new District with an unchanged Sector still refreshes the breakdown.
+        if not selected_code or not sector:
+            raise PreventUpdate
+        is_urban = is_urban_district(districts_df, selected_code)
+        return compute_decomposition_children(engine, selected_code, sector, is_urban=is_urban)

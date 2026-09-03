@@ -218,15 +218,25 @@ def shape_decomposition(district_code: str, sector: str, breakdown: dict[str, pd
 
     Environment has no Dimension rows (ADR-0003) — `dimensions` comes back
     empty in that case, and the UI falls back to showing Indicators directly.
+    `sector_complete` flags whether the Sector Index used every Indicator, so a
+    dimension-less Sector still carries a completeness signal (it has no
+    Dimension rows to carry one). Defaults to True when the Sector Index row is
+    absent (e.g. an unscored Sector for this district).
     """
     dimensions = breakdown["dimensions"]
     indicator_values = breakdown["indicator_values"]
+    sector_index = breakdown.get("sector_index")
+
+    sector_complete = True
+    if sector_index is not None and not sector_index.empty:
+        sector_complete = bool(sector_index.iloc[0]["complete"])
 
     return {
         "district_code": district_code,
         "sector": sector,
         "dimensions": dimensions.to_dict("records"),
         "indicators": indicator_values.to_dict("records"),
+        "sector_complete": sector_complete,
     }
 
 

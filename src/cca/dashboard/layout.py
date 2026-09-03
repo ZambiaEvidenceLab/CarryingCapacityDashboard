@@ -78,10 +78,45 @@ def build_layout(sectors: list[str]) -> dmc.MantineProvider:
         ],
     )
 
+    # Within-District detail (ticket 06, ADR-0020): a right Drawer that slides in
+    # over the scan. Its inner containers are declared here up front (radar,
+    # decomposed-Sector Select, decomposition container, Urban-chip container);
+    # the selection callback fills them and the Decomposition View shows by default.
+    detail_drawer = dmc.Drawer(
+        id="detail-drawer",
+        position="right",
+        size="xl",
+        padding="md",
+        opened=False,
+        title=dmc.Text(id="drawer-title", fw=700),
+        children=dmc.Stack(
+            gap="md",
+            children=[
+                dmc.Box(id="drawer-urban-note"),
+                dmc.Text(
+                    "Cross-sector profile — click an axis to switch the decomposition below",
+                    size="sm",
+                    fw=600,
+                ),
+                dcc.Graph(id="radar", style={"height": "320px"}, config={"displayModeBar": False}),
+                dmc.Divider(),
+                dmc.Select(
+                    id="drawer-sector",
+                    label="Decompose Sector",
+                    data=[{"label": sector, "value": sector} for sector in sectors],
+                    allowDeselect=False,
+                    w=240,
+                ),
+                dmc.Box(id="decomp-content"),
+            ],
+        ),
+    )
+
     return dmc.MantineProvider(
         forceColorScheme="light",
         children=[
           dcc.Store(id="selected-district"),
+          detail_drawer,
           dmc.AppShell(
             header={"height": 68},
             padding="md",
