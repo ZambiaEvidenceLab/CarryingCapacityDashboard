@@ -123,6 +123,24 @@ class TestWinsorization:
         assert abs(capped.min() - values.min()) < 1.0
 
 
+class TestRawValues:
+    def test_raw_carries_the_submitted_value_unwinsorized_and_unoriented(self):
+        # An inverted indicator with an extreme outlier: normalisation and
+        # orientation both transform the value, but `raw` must still read
+        # back exactly what was submitted.
+        rows = [(d, "ind_a", float(i)) for i, d in enumerate(DISTRICTS)]
+        rows[-1] = (DISTRICTS[-1], "ind_a", 1000.0)  # outlier, winsorize caps it for scoring
+        scores = score_indicators(
+            raw(rows), {"ind_a": IndicatorMeta("ind_a", "Health", "Supply", "invert")}, DISTRICTS
+        )
+        assert scores["ind_a"].raw[DISTRICTS[-1]] == pytest.approx(1000.0)
+
+    def test_a_missing_district_is_nan_in_raw_too(self):
+        rows = [(d, "ind_a", 10.0) for d in DISTRICTS if d != "D01"]
+        scores = score_indicators(raw(rows), {"ind_a": IndicatorMeta("ind_a", "Health", "Supply")}, DISTRICTS)
+        assert pd.isna(scores["ind_a"].raw["D01"])
+
+
 class TestAggregation:
     def test_averages_present_indicator_scores_for_a_district(self):
         scores = score_indicators(

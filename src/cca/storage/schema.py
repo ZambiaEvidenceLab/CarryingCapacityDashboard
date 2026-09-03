@@ -8,12 +8,14 @@ across all five Sectors via a `sector` column, never per-sector tables.
   `dimension IS NULL` marks a Sector Index row, per ADR-0003's Environment
   dimension-less path).
 - `indicators` — `indicator_values`: cleaned, normalised indicator values
-  per district per indicator per run. A missing indicator for a district
-  simply has no row (ADR-0007/ADR-0008: dropped, not imputed).
+  *and* the raw value each was computed from, per district per indicator
+  per run. A missing indicator for a district simply has no row
+  (ADR-0007/ADR-0008: dropped, not imputed).
 - `metadata` — `indicator_definitions`: the indicator catalog (sector,
-  dimension, orientation, reference year, data-source attribution). Not
-  part of ADR-0014's per-run append-only guarantee — it describes the
-  catalog itself, not a scored run, so it's upserted in place.
+  dimension, orientation, reference year, data-source attribution, and an
+  optional NDP objective/target in raw units). Not part of ADR-0014's
+  per-run append-only guarantee — it describes the catalog itself, not a
+  scored run, so it's upserted in place.
   `districts`: the GRID3 district master list (ADR-0006), including the
   `is_urban` flag the dashboard's Urban annotation reads. Every
   `district_code` column elsewhere is foreign-keyed to this table, so a
@@ -25,8 +27,9 @@ across all five Sectors via a `sector` column, never per-sector tables.
   report summary, and a path referencing the full report committed to the
   repo (ADR-0015).
 
-Raw indicator values never live here (ADR-0016) — only the processed layer
-and the submission catalog do.
+Raw submission *files* never live here (ADR-0016) — only the numeric raw
+*value* each Indicator carries does, alongside its normalised score
+(ADR-0019).
 """
 
 from __future__ import annotations
@@ -93,6 +96,10 @@ indicator_values = Table(
     Column("indicator_id", String, nullable=False),
     Column("sector", String, nullable=False),
     Column("value", Float, nullable=False),
+    # The value as submitted, before winsorize/orient/normalise -- stored
+    # for display and raw-unit objective comparison only, never fed back
+    # into scoring math (ADR-0019).
+    Column("raw_value", Float, nullable=False),
     schema="indicators",
 )
 
@@ -120,6 +127,10 @@ indicator_definitions = Table(
     Column("orientation", String, nullable=False),
     Column("reference_year", Integer, nullable=True),
     Column("data_source", String, nullable=True),
+    # A future NDP target in the Indicator's raw units, drawn as a line on
+    # the compare-to-others chart -- nullable, empty until MoFNP supplies
+    # values (ADR-0019).
+    Column("objective", Float, nullable=True),
     schema="metadata",
 )
 

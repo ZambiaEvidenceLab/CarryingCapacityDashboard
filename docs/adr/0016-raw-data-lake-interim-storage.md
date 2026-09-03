@@ -1,8 +1,10 @@
 ---
-status: accepted
+status: accepted (raw *value* scope narrowed by ADR-0019)
 ---
 
 # Raw data lives outside PostgreSQL, in a data lake; interim storage is the private GitHub repo and local machine
+
+> **Amended by [ADR-0019](0019-raw-indicator-values-in-processed-layer.md)**: "raw data" here meant the raw *submission file* — that still never enters PostgreSQL, exactly as decided below. ADR-0019 draws a boundary this ADR didn't: the numeric raw *value* one Indicator carries for one District *does* now live in PostgreSQL's processed layer, alongside its normalised score, so the dashboard can display it. The file/value distinction, not this ADR's storage-location decision, is what changed.
 
 Raw ministry submissions are never stored in PostgreSQL. They live in a data lake, conceptually separate from the processed database: for now (development/prototyping phase), that means files kept on the developer's laptop and committed to this **private** GitHub repository. Long-term, a proper data lake — cloud object storage (e.g. AWS S3) or physical/on-prem file storage — will replace this, chosen once hosting is settled with MoFNP (see the workshop's hosting question). PostgreSQL holds only the processed/queryable layer — the `indicators`, `indices`, and `metadata` schemas — plus a lightweight catalog of raw submissions (file location, submitter, timestamp, status: `pending`/`published`/`rejected`). There is no `raw` schema in Postgres.
 

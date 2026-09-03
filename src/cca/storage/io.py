@@ -79,10 +79,11 @@ def write_scoring_run(
     """Persist a scoring-engine run as a new, current, append-only run (ADR-0014).
 
     Writes `indices.runs`, `indices.scores` (Dimension and Sector Index
-    rows), and `indicators.indicator_values` (normalised per-indicator
-    values — a missing indicator for a district simply has no row, per
-    ADR-0007/ADR-0008's "dropped, not imputed"). Every prior run is marked
-    `is_current = false`; the new run is marked `true`.
+    rows), and `indicators.indicator_values` (normalised and raw
+    per-indicator values, ADR-0019 — a missing indicator for a district
+    simply has no row, per ADR-0007/ADR-0008's "dropped, not imputed").
+    Every prior run is marked `is_current = false`; the new run is marked
+    `true`.
 
     Returns the new run's `run_id`.
     """
@@ -113,12 +114,13 @@ def write_scoring_run(
                 "indicator_id": indicator_id,
                 "sector": meta_by_id[indicator_id].sector,
                 "value": float(value),
+                "raw_value": float(indicator_score.raw[district_code]),
             }
             for indicator_id, indicator_score in result.indicator_scores.items()
             for district_code, value in indicator_score.normalised.items()
             if pd.notna(value)
         ]
-        value_columns = ["run_id", "district_code", "indicator_id", "sector", "value"]
+        value_columns = ["run_id", "district_code", "indicator_id", "sector", "value", "raw_value"]
         pd.DataFrame(value_records, columns=value_columns).to_sql(
             "indicator_values", conn, schema="indicators", if_exists="append", index=False
         )
@@ -132,8 +134,10 @@ def write_indicator_metadata(
     *,
     reference_years: dict[str, int] | None = None,
     data_sources: dict[str, str] | None = None,
+    objectives: dict[str, float] | None = None,
 ) -> None:
-    """Upsert the indicator catalog's definitions, reference years, and data-source attribution.
+    """Upsert the indicator catalog's definitions, reference years, data-source attribution,
+    and NDP objectives (ADR-0019 — nullable, empty until MoFNP supplies values).
 
     Unlike the processed layer, this describes the catalog itself rather
     than a scored run, so it isn't part of ADR-0014's append-only
@@ -141,18 +145,20 @@ def write_indicator_metadata(
     """
     reference_years = reference_years or {}
     data_sources = data_sources or {}
+    objectives = objectives or {}
 
     with engine.begin() as conn:
         for meta in indicator_metas:
             conn.execute(
                 text(
                     "INSERT INTO metadata.indicator_definitions "
-                    "(indicator_id, sector, dimension, orientation, reference_year, data_source) "
-                    "VALUES (:indicator_id, :sector, :dimension, :orientation, :reference_year, :data_source) "
+                    "(indicator_id, sector, dimension, orientation, reference_year, data_source, objective) "
+                    "VALUES (:indicator_id, :sector, :dimension, :orientation, :reference_year, "
+                    ":data_source, :objective) "
                     "ON CONFLICT (indicator_id) DO UPDATE SET "
                     "sector = EXCLUDED.sector, dimension = EXCLUDED.dimension, "
                     "orientation = EXCLUDED.orientation, reference_year = EXCLUDED.reference_year, "
-                    "data_source = EXCLUDED.data_source"
+                    "data_source = EXCLUDED.data_source, objective = EXCLUDED.objective"
                 ),
                 {
                     "indicator_id": meta.indicator_id,
@@ -161,6 +167,7 @@ def write_indicator_metadata(
                     "orientation": meta.orientation,
                     "reference_year": reference_years.get(meta.indicator_id),
                     "data_source": data_sources.get(meta.indicator_id),
+                    "objective": objectives.get(meta.indicator_id),
                 },
             )
 
@@ -196,7 +203,8 @@ def read_district_decomposition(engine: Engine, district_code: str, sector: str)
         )
         indicator_values = pd.read_sql(
             text(
-                "SELECT v.indicator_id, v.value, m.dimension, m.reference_year, m.data_source "
+                "SELECT v.indicator_id, v.value, v.raw_value, m.dimension, m.reference_year, "
+                "m.data_source, m.objective "
                 "FROM indicators.indicator_values v "
                 f"{_CURRENT_RUN_JOIN.format(alias='v')} "
                 "LEFT JOIN metadata.indicator_definitions m ON m.indicator_id = v.indicator_id "
@@ -206,6 +214,27 @@ def read_district_decomposition(engine: Engine, district_code: str, sector: str)
             params={"district_code": district_code, "sector": sector},
         )
     return {"dimensions": dimensions, "indicator_values": indicator_values}
+
+
+def read_indicator_cohort_values(engine: Engine, indicator_id: str) -> pd.DataFrame:
+    """One Indicator's raw value for every District in the current run (compare-to-others chart).
+
+    A District with no value for this Indicator simply has no row
+    (ADR-0007/ADR-0008: dropped, not imputed) — callers reindex against the
+    district master list themselves if they need to render "no value
+    reported" for the rest of the cohort.
+    """
+    with engine.connect() as conn:
+        return pd.read_sql(
+            text(
+                "SELECT v.district_code, v.raw_value "
+                "FROM indicators.indicator_values v "
+                f"{_CURRENT_RUN_JOIN.format(alias='v')} "
+                "WHERE r.is_current = true AND v.indicator_id = :indicator_id"
+            ),
+            conn,
+            params={"indicator_id": indicator_id},
+        )
 
 
 def read_national_summary(engine: Engine, sector: str) -> dict[str, float | int | None]:
@@ -232,7 +261,7 @@ def read_indicator_catalog(engine: Engine) -> pd.DataFrame:
     with engine.connect() as conn:
         return pd.read_sql(
             text(
-                "SELECT indicator_id, sector, dimension, orientation, reference_year, data_source "
+                "SELECT indicator_id, sector, dimension, orientation, reference_year, data_source, objective "
                 "FROM metadata.indicator_definitions"
             ),
             conn,

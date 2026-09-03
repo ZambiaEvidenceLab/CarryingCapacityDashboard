@@ -7,6 +7,7 @@ from cca.scoring.engine import IndicatorMeta, run_scoring
 from cca.storage.io import (
     read_district_decomposition,
     read_districts,
+    read_indicator_cohort_values,
     read_latest_sector_scores,
     read_national_summary,
     update_submission_status,
@@ -121,6 +122,24 @@ class TestWriteScoringRun:
         expected = pd.DataFrame(expected_records).sort_values(["district_code", "indicator_id"]).reset_index(drop=True)
         pd.testing.assert_frame_equal(stored, expected, check_dtype=False)
 
+    def test_round_trips_raw_indicator_values_alongside_the_normalised_ones(self, pg):
+        result = _run()
+
+        write_scoring_run(pg, result, INDICATOR_METAS)
+        with pg.connect() as conn:
+            stored = pd.read_sql(
+                text("SELECT district_code, indicator_id, raw_value FROM indicators.indicator_values"), conn
+            ).sort_values(["district_code", "indicator_id"]).reset_index(drop=True)
+
+        expected_records = [
+            {"district_code": district_code, "indicator_id": indicator_id, "raw_value": float(value)}
+            for indicator_id, indicator_score in result.indicator_scores.items()
+            for district_code, value in indicator_score.raw.items()
+            if pd.notna(indicator_score.normalised.get(district_code))
+        ]
+        expected = pd.DataFrame(expected_records).sort_values(["district_code", "indicator_id"]).reset_index(drop=True)
+        pd.testing.assert_frame_equal(stored, expected, check_dtype=False)
+
     def test_rejects_a_failed_validation(self, pg):
         failed = run_scoring(_raw_values(), INDICATOR_METAS, DISTRICTS + ["UNKNOWN_ONLY_IN_MASTER_LIST"])
 
@@ -218,6 +237,33 @@ class TestReadFunctions:
             "health_distance_to_nearest_facility",
         }
 
+    def test_district_decomposition_indicator_rows_carry_the_raw_value_alongside_the_score(self, pg):
+        write_scoring_run(pg, _run(), INDICATOR_METAS)
+
+        indicator_values = read_district_decomposition(pg, "D1", "Health")["indicator_values"].set_index(
+            "indicator_id"
+        )
+
+        # D1's raw doctor-to-population ratio was submitted as 0.1 (_raw_values above).
+        assert indicator_values.loc["health_doctor_to_population_ratio", "raw_value"] == pytest.approx(0.1)
+
+    def test_indicator_cohort_values_returns_every_districts_raw_value_for_one_indicator(self, pg):
+        write_scoring_run(pg, _run(), INDICATOR_METAS)
+
+        cohort = read_indicator_cohort_values(pg, "health_doctor_to_population_ratio").set_index("district_code")
+
+        assert cohort.loc["D1", "raw_value"] == pytest.approx(0.1)
+        assert cohort.loc["D2", "raw_value"] == pytest.approx(0.3)
+        assert cohort.loc["D3", "raw_value"] == pytest.approx(0.5)
+
+    def test_indicator_cohort_values_omits_districts_with_no_value_for_that_indicator(self, pg):
+        write_scoring_run(pg, _run(), INDICATOR_METAS)
+
+        # D3's health_distance_to_nearest_facility was deliberately missing in _raw_values.
+        cohort = read_indicator_cohort_values(pg, "health_distance_to_nearest_facility")
+
+        assert set(cohort["district_code"]) == {"D1", "D2"}
+
     def test_national_summary_reflects_the_written_run(self, pg):
         write_scoring_run(pg, _run(), INDICATOR_METAS)
 
@@ -247,6 +293,34 @@ class TestIndicatorMetadata:
 
         assert row["reference_year"] == 2022
         assert row["data_source"] == "Forestry Dept. survey"
+
+    def test_write_indicator_metadata_leaves_objective_null_until_mofnp_supplies_it(self, clean_pg):
+        write_indicator_metadata(clean_pg, INDICATOR_METAS)
+
+        with clean_pg.connect() as conn:
+            objective = conn.execute(
+                text(
+                    "SELECT objective FROM metadata.indicator_definitions "
+                    "WHERE indicator_id = 'environment_forest_cover'"
+                )
+            ).scalar_one()
+
+        assert objective is None
+
+    def test_write_indicator_metadata_upserts_an_objective_when_supplied(self, clean_pg):
+        write_indicator_metadata(
+            clean_pg, INDICATOR_METAS, objectives={"environment_forest_cover": 65.0}
+        )
+
+        with clean_pg.connect() as conn:
+            objective = conn.execute(
+                text(
+                    "SELECT objective FROM metadata.indicator_definitions "
+                    "WHERE indicator_id = 'environment_forest_cover'"
+                )
+            ).scalar_one()
+
+        assert objective == pytest.approx(65.0)
 
 
 class TestSubmissionCatalog:

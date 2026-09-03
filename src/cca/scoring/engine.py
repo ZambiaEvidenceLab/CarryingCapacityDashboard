@@ -49,6 +49,7 @@ class IndicatorScore:
     indicator_id: str
     normalised: pd.Series  # district_code -> value in [0, 100], or NaN if missing
     winsorization: WinsorizationReport
+    raw: pd.Series  # district_code -> value as submitted (pre-winsorize/orient), or NaN if missing
 
 
 @dataclass
@@ -181,7 +182,7 @@ def score_indicators(
         winsorized, report = winsorize(indicator_id, subset)
         oriented = orient(winsorized, meta.orientation)
         normalised = normalise(oriented)
-        results[indicator_id] = IndicatorScore(indicator_id, normalised, report)
+        results[indicator_id] = IndicatorScore(indicator_id, normalised, report, raw=subset)
     return results
 
 
