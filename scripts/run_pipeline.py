@@ -22,12 +22,15 @@ import os
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
 from sqlalchemy import create_engine
 
 from cca.grid3.client import fetch_district_master_list
 from cca.grid3.simplify import ensure_simplified_boundary_cache
 from cca.pipeline.run import run_validation_and_publish
 from cca.storage.io import write_district_master_list
+
+load_dotenv()
 from cca.storage.schema import create_all
 
 DEFAULT_GRID3_CACHE_PATH = Path(__file__).parent / ".grid3_districts_cache.json"

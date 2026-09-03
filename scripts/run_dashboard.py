@@ -15,11 +15,14 @@ GRID3 boundaries this reuses without a network call or a shapely pass.
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
 from sqlalchemy import create_engine
 
 from cca.dashboard.app import build_app
 from cca.grid3.client import fetch_district_master_list
 from cca.grid3.simplify import ensure_simplified_boundary_cache
+
+load_dotenv()
 
 DEFAULT_GRID3_CACHE_PATH = Path(__file__).parent / ".grid3_districts_cache.json"
 DEFAULT_GRID3_SIMPLIFIED_CACHE_PATH = Path(__file__).parent / ".grid3_districts_simplified_cache.json"

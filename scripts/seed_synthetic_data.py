@@ -20,6 +20,7 @@ import argparse
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 
 from cca.grid3.client import fetch_district_master_list
@@ -28,6 +29,8 @@ from cca.scoring.indicators import CCA_INDICATORS
 from cca.storage.io import write_district_master_list, write_indicator_metadata, write_scoring_run
 from cca.storage.schema import create_all
 from cca.synthetic.generator import generate_synthetic_dataset
+
+load_dotenv()
 
 DEFAULT_DATABASE_URL = "postgresql+psycopg://cca_dev:cca_dev_local_only@localhost:5432/cca_dev"
 DEFAULT_GRID3_CACHE_PATH = Path(__file__).parent / ".grid3_districts_cache.json"
