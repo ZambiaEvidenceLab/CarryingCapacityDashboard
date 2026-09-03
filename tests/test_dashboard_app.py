@@ -345,10 +345,11 @@ class TestComputeSummaryStrip:
 
 class TestComputeRadarFigure:
     def test_one_trace_per_district_and_national_average_across_the_given_sectors(self, pg):
-        figure = compute_radar_figure(pg, SECTORS, "D1")
+        figure = compute_radar_figure(pg, SECTORS, "D1", "District One")
 
         assert len(figure.data) == 2
         assert list(figure.data[0].theta) == SECTORS
+        assert figure.data[0].name == "District One"
         assert figure.data[1].name == "National average"
 
 

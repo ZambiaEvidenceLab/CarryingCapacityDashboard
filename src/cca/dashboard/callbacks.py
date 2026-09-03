@@ -338,7 +338,7 @@ def compute_summary_strip(engine: Engine, sector: str) -> list:
     ]
 
 
-def compute_radar_figure(engine: Engine, sectors: list[str], district_code: str) -> go.Figure:
+def compute_radar_figure(engine: Engine, sectors: list[str], district_code: str, district_name: str) -> go.Figure:
     all_scores = read_latest_sector_scores(engine)
     radar = shape_radar_data(district_code, all_scores, sectors)
     completeness_text = [
@@ -352,7 +352,7 @@ def compute_radar_figure(engine: Engine, sectors: list[str], district_code: str)
             r=radar["district_scores"],
             theta=radar["sectors"],
             fill="toself",
-            name=district_code,
+            name=district_name,
             mode="lines+markers",
             text=completeness_text,
             hovertemplate="%{theta}: %{r}<br>%{text}<extra></extra>",
@@ -750,8 +750,10 @@ def register_callbacks(
             raise PreventUpdate
         urban = is_urban_district(districts_df, selected_code)
         urban_chip = dmc.Badge("Urban", size="sm", variant="light", color="gray") if urban else None
-        radar = compute_radar_figure(engine, sectors, selected_code)
-        return True, _district_title(districts_df, selected_code), urban_chip, radar, sector
+        title = _district_title(districts_df, selected_code)
+        district_name = title.split(" · ")[0]
+        radar = compute_radar_figure(engine, sectors, selected_code, district_name)
+        return True, title, urban_chip, radar, sector
 
     @app.callback(
         Output("drawer-sector", "value", allow_duplicate=True),
