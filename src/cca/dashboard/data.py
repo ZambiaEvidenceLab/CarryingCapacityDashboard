@@ -52,6 +52,20 @@ def shape_map_data(sector_scores: pd.DataFrame, districts: pd.DataFrame) -> pd.D
     return merged
 
 
+def score_range(scores: pd.DataFrame) -> tuple[float, float]:
+    """The live min-max of a Sector's present scores, for map colour scaling (ADR-0017).
+
+    Falls back to 0-100 when there's nothing to shade across yet (no scores,
+    or every present score identical) — `zmin == zmax` would otherwise
+    flatten the colourscale to a single shade.
+    """
+    present = scores["score"].dropna()
+    if present.empty:
+        return 0.0, 100.0
+    lo, hi = float(present.min()), float(present.max())
+    return (lo, hi) if hi > lo else (0.0, 100.0)
+
+
 def shape_national_summary(summary: dict) -> dict:
     """Round the national summary strip's figures; an empty run/sector stays None."""
 

@@ -4,6 +4,7 @@ from cca.dashboard.data import (
     URBAN_AGRICULTURE_ANNOTATION,
     build_district_geojson,
     is_urban_district,
+    score_range,
     shape_decomposition,
     shape_map_data,
     shape_national_summary,
@@ -51,6 +52,29 @@ class TestShapeMapData:
 
         assert pd.isna(merged.loc["D2", "score"])
         assert merged.loc["D2", "completeness_label"] == "Incomplete data"
+
+
+class TestScoreRange:
+    def test_returns_the_live_min_and_max_of_present_scores(self):
+        scores = pd.DataFrame([{"score": 20.0}, {"score": 80.0}, {"score": 50.0}])
+
+        assert score_range(scores) == (20.0, 80.0)
+
+    def test_ignores_missing_scores(self):
+        scores = pd.DataFrame([{"score": 20.0}, {"score": None}, {"score": 80.0}])
+
+        assert score_range(scores) == (20.0, 80.0)
+
+    def test_falls_back_to_0_100_when_every_score_is_missing(self):
+        scores = pd.DataFrame([{"score": None}, {"score": None}])
+
+        assert score_range(scores) == (0.0, 100.0)
+
+    def test_falls_back_to_0_100_when_every_present_score_is_identical(self):
+        # zmin == zmax would flatten the colourscale to a single shade.
+        scores = pd.DataFrame([{"score": 50.0}, {"score": 50.0}])
+
+        assert score_range(scores) == (0.0, 100.0)
 
 
 class TestShapeNationalSummary:

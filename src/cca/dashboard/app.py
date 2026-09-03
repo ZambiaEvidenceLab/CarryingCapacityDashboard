@@ -17,7 +17,7 @@ from cca.dashboard.data import build_district_geojson
 from cca.dashboard.layout import build_layout
 from cca.grid3.client import District
 from cca.scoring.indicators import CCA_INDICATORS
-from cca.storage.io import read_districts, read_indicator_catalog
+from cca.storage.io import read_districts
 
 
 def _ordered_sectors() -> list[str]:
@@ -35,9 +35,8 @@ SECTORS = _ordered_sectors()
 def build_app(engine: Engine, districts: list[District]) -> Dash:
     districts_df = read_districts(engine)
     geojson = build_district_geojson(districts)
-    indicator_catalog = read_indicator_catalog(engine)
 
     app = Dash(__name__)
-    app.layout = build_layout(SECTORS, indicator_catalog)
-    register_callbacks(app, engine, districts_df, geojson, SECTORS)
+    app.layout = build_layout(SECTORS)
+    register_callbacks(app, engine, districts_df, geojson)
     return app

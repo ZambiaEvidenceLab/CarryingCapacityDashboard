@@ -9,13 +9,13 @@ layer that wires them to Dash `Input`/`Output`s.
 
 from __future__ import annotations
 
-from dash import Dash, Input, Output, State, dash_table, html
+from dash import Dash, Input, Output, dash_table, html
 from plotly import graph_objects as go
 from sqlalchemy import Engine
 
+from cca.dashboard.colors import SECTOR_RAMP
 from cca.dashboard.data import (
-    URBAN_AGRICULTURE_ANNOTATION,
-    is_urban_district,
+    score_range,
     shape_decomposition,
     shape_map_data,
     shape_national_summary,
@@ -27,35 +27,50 @@ from cca.storage.io import (
     read_national_summary,
 )
 
-
-def _clicked_point_value(click_data: dict | None, key: str) -> str | None:
-    """Pull one field off a Plotly `clickData` event's first point, or None if nothing was clicked."""
-    if not click_data:
-        return None
-    return click_data["points"][0][key]
+# Zambia's approximate national extent — a fixed view, not fitted to
+# locations, since the map never shows anything but all 116 Districts.
+MAP_CENTER = {"lat": -13.5, "lon": 27.8}
+MAP_ZOOM = 4.7
 
 
 def compute_map_figure(engine: Engine, districts_df, geojson: dict, sector: str) -> go.Figure:
     sector_scores = read_latest_sector_scores(engine, sector=sector)
     merged = shape_map_data(sector_scores, districts_df)
+    lo, hi = score_range(merged)
 
     fig = go.Figure(
-        go.Choropleth(
+        go.Choroplethmap(
             geojson=geojson,
             locations=merged["district_code"],
             z=merged["score"],
-            zmin=0,
-            zmax=100,
-            colorscale="Viridis",
-            marker_line_width=0.5,
+            featureidkey="id",
+            zmin=lo,
+            zmax=hi,
+            colorscale=SECTOR_RAMP[sector],
+            marker={"line": {"width": 0.4, "color": "white"}},
             customdata=merged[["name", "completeness_label"]],
-            hovertemplate="%{customdata[0]}<br>Score: %{z:.1f}<br>%{customdata[1]}<extra></extra>",
-            colorbar_title=f"{sector} Index",
+            hovertemplate="<b>%{customdata[0]}</b><br>Score: %{z:.1f}<br>%{customdata[1]}<extra></extra>",
+            colorbar={"title": {"text": f"{sector} Index"}},
         )
     )
-    fig.update_geos(fitbounds="locations", visible=False)
-    fig.update_layout(margin={"l": 0, "r": 0, "t": 0, "b": 0})
+    fig.update_layout(
+        map_style="white-bg",
+        map_center=MAP_CENTER,
+        map_zoom=MAP_ZOOM,
+        margin={"l": 0, "r": 0, "t": 0, "b": 0},
+        uirevision="keep",
+    )
     return fig
+
+
+def compute_subtitle(engine: Engine, sector: str) -> str:
+    """The one-line subtitle: current Sector and the colour direction/range (ADR-0017)."""
+    sector_scores = read_latest_sector_scores(engine, sector=sector)
+    lo, hi = score_range(sector_scores)
+    return (
+        f"Showing {sector}. Darker = more capacity "
+        f"(shaded across this Sector's range, {lo:.0f}-{hi:.0f}). Click a district for detail."
+    )
 
 
 def compute_summary_strip(engine: Engine, sector: str) -> list:
@@ -135,61 +150,11 @@ def compute_decomposition_children(engine: Engine, district_code: str, sector: s
     return children
 
 
-def register_callbacks(app: Dash, engine: Engine, districts_df, geojson: dict, sectors: list[str]) -> None:
+def register_callbacks(app: Dash, engine: Engine, districts_df, geojson: dict) -> None:
     @app.callback(
-        Output("choropleth-map", "figure"),
-        Output("summary-strip", "children"),
-        Input("sector-dropdown", "value"),
+        Output("map-graph", "figure"),
+        Output("subtitle", "children"),
+        Input("sector-select", "value"),
     )
     def _update_map(sector):
-        return compute_map_figure(engine, districts_df, geojson, sector), compute_summary_strip(engine, sector)
-
-    @app.callback(
-        Output("district-section", "style"),
-        Output("district-heading", "children"),
-        Output("urban-annotation", "children"),
-        Output("radar-chart", "figure"),
-        Output("selected-district-store", "data"),
-        Output("decomposition-section", "style"),
-        Input("choropleth-map", "clickData"),
-        prevent_initial_call=True,
-    )
-    def _select_district(click_data):
-        district_code = _clicked_point_value(click_data, "location")
-        if district_code is None:
-            return {"display": "none"}, None, None, go.Figure(), None, {"display": "none"}
-
-        name_row = districts_df.loc[districts_df["district_code"] == district_code]
-        name = name_row.iloc[0]["name"] if not name_row.empty else district_code
-
-        annotation = URBAN_AGRICULTURE_ANNOTATION if is_urban_district(districts_df, district_code) else None
-        radar_figure = compute_radar_figure(engine, sectors, district_code)
-        # A newly selected district hides any Decomposition View left open
-        # from the previous district's radar chart.
-        return (
-            {"display": "block"},
-            f"{name} ({district_code})",
-            annotation,
-            radar_figure,
-            district_code,
-            {"display": "none"},
-        )
-
-    @app.callback(
-        Output("decomposition-section", "style", allow_duplicate=True),
-        Output("decomposition-heading", "children"),
-        Output("decomposition-content", "children"),
-        Input("radar-chart", "clickData"),
-        State("selected-district-store", "data"),
-        prevent_initial_call=True,
-    )
-    def _select_sector_axis(click_data, district_code):
-        sector = _clicked_point_value(click_data, "theta")
-        if sector is None or not district_code:
-            return {"display": "none"}, None, None
-
-        return (
-            {"display": "block"},
-            f"{sector} decomposition for {district_code}",
-            compute_decomposition_children(engine, district_code, sector),
-        )
+        return compute_map_figure(engine, districts_df, geojson, sector), compute_subtitle(engine, sector)

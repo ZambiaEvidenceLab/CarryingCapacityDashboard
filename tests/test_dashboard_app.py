@@ -12,12 +12,19 @@ from cca.dashboard.callbacks import (
     compute_decomposition_children,
     compute_map_figure,
     compute_radar_figure,
+    compute_subtitle,
     compute_summary_strip,
 )
-from cca.dashboard.data import build_district_geojson
+from cca.dashboard.colors import SECTOR_RAMP
+from cca.dashboard.data import build_district_geojson, score_range
 from cca.grid3.client import District
 from cca.scoring.engine import IndicatorMeta, run_scoring
-from cca.storage.io import read_districts, write_district_master_list, write_scoring_run
+from cca.storage.io import (
+    read_districts,
+    read_latest_sector_scores,
+    write_district_master_list,
+    write_scoring_run,
+)
 
 DISTRICTS = ["D1", "D2", "D3"]
 
@@ -69,6 +76,50 @@ class TestComputeMapFigure:
         trace = figure.data[0]
         assert sorted(trace.locations) == DISTRICTS
         assert trace.geojson == geojson
+
+    def test_uses_a_webgl_choroplethmap_trace_with_no_basemap(self, pg):
+        districts_df = read_districts(pg)
+        geojson = build_district_geojson(DISTRICT_RECORDS)
+
+        figure = compute_map_figure(pg, districts_df, geojson, "Health")
+
+        assert figure.data[0].type == "choroplethmap"
+        assert figure.layout.map.style == "white-bg"
+
+    def test_colours_with_the_selected_sectors_own_hue_ramp(self, pg):
+        districts_df = read_districts(pg)
+        geojson = build_district_geojson(DISTRICT_RECORDS)
+
+        health_figure = compute_map_figure(pg, districts_df, geojson, "Health")
+        environment_figure = compute_map_figure(pg, districts_df, geojson, "Environment")
+
+        assert list(health_figure.data[0].colorscale) == [tuple(stop) for stop in SECTOR_RAMP["Health"]]
+        assert health_figure.data[0].colorscale != environment_figure.data[0].colorscale
+
+    def test_colour_range_is_the_sectors_live_min_max_not_a_fixed_0_100(self, pg):
+        districts_df = read_districts(pg)
+        geojson = build_district_geojson(DISTRICT_RECORDS)
+        expected_lo, expected_hi = score_range(read_latest_sector_scores(pg, sector="Health"))
+
+        figure = compute_map_figure(pg, districts_df, geojson, "Health")
+
+        assert figure.data[0].zmin == pytest.approx(expected_lo)
+        assert figure.data[0].zmax == pytest.approx(expected_hi)
+
+
+class TestComputeSubtitle:
+    def test_names_the_current_sector_and_the_colour_direction(self, pg):
+        subtitle = compute_subtitle(pg, "Health")
+
+        assert "Health" in subtitle
+        assert "Darker = more capacity" in subtitle
+
+    def test_states_the_sectors_live_range_shown(self, pg):
+        lo, hi = score_range(read_latest_sector_scores(pg, sector="Health"))
+
+        subtitle = compute_subtitle(pg, "Health")
+
+        assert f"{lo:.0f}-{hi:.0f}" in subtitle
 
 
 class TestComputeSummaryStrip:
