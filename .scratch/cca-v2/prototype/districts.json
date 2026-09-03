@@ -1,0 +1,698 @@
+[
+  {
+    "code": "103001",
+    "name": "Chadiza",
+    "province": "Eastern",
+    "is_urban": false
+  },
+  {
+    "code": "106001",
+    "name": "Chama",
+    "province": "Eastern",
+    "is_urban": false
+  },
+  {
+    "code": "103010",
+    "name": "Chasefu",
+    "province": "Eastern",
+    "is_urban": false
+  },
+  {
+    "code": "108001",
+    "name": "Chavuma",
+    "province": "North-Western",
+    "is_urban": false
+  },
+  {
+    "code": "104001",
+    "name": "Chembe",
+    "province": "Luapula",
+    "is_urban": false
+  },
+  {
+    "code": "101001",
+    "name": "Chibombo",
+    "province": "Central",
+    "is_urban": false
+  },
+  {
+    "code": "104002",
+    "name": "Chiengi",
+    "province": "Luapula",
+    "is_urban": false
+  },
+  {
+    "code": "104012",
+    "name": "Chifunabuli",
+    "province": "Luapula",
+    "is_urban": false
+  },
+  {
+    "code": "109001",
+    "name": "Chikankanta",
+    "province": "Southern",
+    "is_urban": false
+  },
+  {
+    "code": "105001",
+    "name": "Chilanga",
+    "province": "Lusaka",
+    "is_urban": false
+  },
+  {
+    "code": "102001",
+    "name": "Chililabombwe",
+    "province": "Copperbelt",
+    "is_urban": false
+  },
+  {
+    "code": "107001",
+    "name": "Chilubi",
+    "province": "Northern",
+    "is_urban": false
+  },
+  {
+    "code": "102002",
+    "name": "Chingola",
+    "province": "Copperbelt",
+    "is_urban": true
+  },
+  {
+    "code": "106002",
+    "name": "Chinsali",
+    "province": "Muchinga",
+    "is_urban": false
+  },
+  {
+    "code": "103011",
+    "name": "Chipangali",
+    "province": "Eastern",
+    "is_urban": false
+  },
+  {
+    "code": "103002",
+    "name": "Chipata",
+    "province": "Eastern",
+    "is_urban": false
+  },
+  {
+    "code": "104003",
+    "name": "Chipili",
+    "province": "Luapula",
+    "is_urban": false
+  },
+  {
+    "code": "105002",
+    "name": "Chirundu",
+    "province": "Southern",
+    "is_urban": false
+  },
+  {
+    "code": "101002",
+    "name": "Chisamba",
+    "province": "Central",
+    "is_urban": false
+  },
+  {
+    "code": "101003",
+    "name": "Chitambo",
+    "province": "Central",
+    "is_urban": false
+  },
+  {
+    "code": "109002",
+    "name": "Choma",
+    "province": "Southern",
+    "is_urban": false
+  },
+  {
+    "code": "105003",
+    "name": "Chongwe",
+    "province": "Lusaka",
+    "is_urban": false
+  },
+  {
+    "code": "109003",
+    "name": "Gwembe",
+    "province": "Southern",
+    "is_urban": false
+  },
+  {
+    "code": "108002",
+    "name": "Ikelenge",
+    "province": "North-Western",
+    "is_urban": false
+  },
+  {
+    "code": "106003",
+    "name": "Isoka",
+    "province": "Muchinga",
+    "is_urban": false
+  },
+  {
+    "code": "101004",
+    "name": "Itezhi-Tezhi",
+    "province": "Southern",
+    "is_urban": false
+  },
+  {
+    "code": "108003",
+    "name": "Kabompo",
+    "province": "North-Western",
+    "is_urban": false
+  },
+  {
+    "code": "101005",
+    "name": "Kabwe",
+    "province": "Central",
+    "is_urban": true
+  },
+  {
+    "code": "105004",
+    "name": "Kafue",
+    "province": "Lusaka",
+    "is_urban": false
+  },
+  {
+    "code": "110001",
+    "name": "Kalabo",
+    "province": "Western",
+    "is_urban": false
+  },
+  {
+    "code": "109004",
+    "name": "Kalomo",
+    "province": "Southern",
+    "is_urban": false
+  },
+  {
+    "code": "102003",
+    "name": "Kalulushi",
+    "province": "Copperbelt",
+    "is_urban": false
+  },
+  {
+    "code": "108010",
+    "name": "Kalumbila",
+    "province": "North-Western",
+    "is_urban": false
+  },
+  {
+    "code": "106008",
+    "name": "Kanchibiya",
+    "province": "Muchinga",
+    "is_urban": false
+  },
+  {
+    "code": "110002",
+    "name": "Kaoma",
+    "province": "Western",
+    "is_urban": false
+  },
+  {
+    "code": "101006",
+    "name": "Kapiri Mposhi",
+    "province": "Central",
+    "is_urban": false
+  },
+  {
+    "code": "107002",
+    "name": "Kaputa",
+    "province": "Northern",
+    "is_urban": false
+  },
+  {
+    "code": "107003",
+    "name": "Kasama",
+    "province": "Northern",
+    "is_urban": false
+  },
+  {
+    "code": "108004",
+    "name": "Kasempa",
+    "province": "North-Western",
+    "is_urban": false
+  },
+  {
+    "code": "103012",
+    "name": "Kasenengwa",
+    "province": "Eastern",
+    "is_urban": false
+  },
+  {
+    "code": "103003",
+    "name": "Katete",
+    "province": "Eastern",
+    "is_urban": false
+  },
+  {
+    "code": "104004",
+    "name": "Kawambwa",
+    "province": "Luapula",
+    "is_urban": false
+  },
+  {
+    "code": "109005",
+    "name": "Kazungula",
+    "province": "Southern",
+    "is_urban": false
+  },
+  {
+    "code": "102004",
+    "name": "Kitwe",
+    "province": "Copperbelt",
+    "is_urban": true
+  },
+  {
+    "code": "106009",
+    "name": "Lavushimanda",
+    "province": "Muchinga",
+    "is_urban": false
+  },
+  {
+    "code": "110003",
+    "name": "Limulunga",
+    "province": "Western",
+    "is_urban": false
+  },
+  {
+    "code": "109006",
+    "name": "Livingstone",
+    "province": "Southern",
+    "is_urban": true
+  },
+  {
+    "code": "110004",
+    "name": "Luampa",
+    "province": "Western",
+    "is_urban": false
+  },
+  {
+    "code": "105005",
+    "name": "Luangwa",
+    "province": "Lusaka",
+    "is_urban": false
+  },
+  {
+    "code": "101007",
+    "name": "Luano",
+    "province": "Central",
+    "is_urban": false
+  },
+  {
+    "code": "102005",
+    "name": "Luanshya",
+    "province": "Copperbelt",
+    "is_urban": false
+  },
+  {
+    "code": "102006",
+    "name": "Lufwanyama",
+    "province": "Copperbelt",
+    "is_urban": false
+  },
+  {
+    "code": "110005",
+    "name": "Lukulu",
+    "province": "Western",
+    "is_urban": false
+  },
+  {
+    "code": "103013",
+    "name": "Lumezi",
+    "province": "Eastern",
+    "is_urban": false
+  },
+  {
+    "code": "103004",
+    "name": "Lundazi",
+    "province": "Eastern",
+    "is_urban": false
+  },
+  {
+    "code": "104005",
+    "name": "Lunga",
+    "province": "Luapula",
+    "is_urban": false
+  },
+  {
+    "code": "107011",
+    "name": "Lunte",
+    "province": "Northern",
+    "is_urban": false
+  },
+  {
+    "code": "107012",
+    "name": "Lupososhi",
+    "province": "Northern",
+    "is_urban": false
+  },
+  {
+    "code": "105006",
+    "name": "Lusaka",
+    "province": "Lusaka",
+    "is_urban": true
+  },
+  {
+    "code": "103014",
+    "name": "Lusangazi",
+    "province": "Eastern",
+    "is_urban": false
+  },
+  {
+    "code": "107004",
+    "name": "Luwingu",
+    "province": "Northern",
+    "is_urban": false
+  },
+  {
+    "code": "106004",
+    "name": "Mafinga",
+    "province": "Muchinga",
+    "is_urban": false
+  },
+  {
+    "code": "103005",
+    "name": "Mambwe",
+    "province": "Eastern",
+    "is_urban": false
+  },
+  {
+    "code": "104006",
+    "name": "Mansa",
+    "province": "Luapula",
+    "is_urban": false
+  },
+  {
+    "code": "108005",
+    "name": "Manyinga",
+    "province": "North-Western",
+    "is_urban": false
+  },
+  {
+    "code": "102007",
+    "name": "Masaiti",
+    "province": "Copperbelt",
+    "is_urban": false
+  },
+  {
+    "code": "109007",
+    "name": "Mazabuka",
+    "province": "Southern",
+    "is_urban": false
+  },
+  {
+    "code": "107005",
+    "name": "Mbala",
+    "province": "Northern",
+    "is_urban": false
+  },
+  {
+    "code": "104007",
+    "name": "Milengi",
+    "province": "Luapula",
+    "is_urban": false
+  },
+  {
+    "code": "110006",
+    "name": "Mitete",
+    "province": "Western",
+    "is_urban": false
+  },
+  {
+    "code": "101008",
+    "name": "Mkushi",
+    "province": "Central",
+    "is_urban": false
+  },
+  {
+    "code": "110007",
+    "name": "Mongu",
+    "province": "Western",
+    "is_urban": false
+  },
+  {
+    "code": "109008",
+    "name": "Monze",
+    "province": "Southern",
+    "is_urban": false
+  },
+  {
+    "code": "106005",
+    "name": "Mpika",
+    "province": "Muchinga",
+    "is_urban": false
+  },
+  {
+    "code": "102008",
+    "name": "Mpongwe",
+    "province": "Copperbelt",
+    "is_urban": false
+  },
+  {
+    "code": "107006",
+    "name": "Mporokoso",
+    "province": "Northern",
+    "is_urban": false
+  },
+  {
+    "code": "107007",
+    "name": "Mpulungu",
+    "province": "Northern",
+    "is_urban": false
+  },
+  {
+    "code": "102009",
+    "name": "Mufulira",
+    "province": "Copperbelt",
+    "is_urban": false
+  },
+  {
+    "code": "108006",
+    "name": "Mufumbwe",
+    "province": "North-Western",
+    "is_urban": false
+  },
+  {
+    "code": "110008",
+    "name": "Mulobezi",
+    "province": "Western",
+    "is_urban": false
+  },
+  {
+    "code": "101009",
+    "name": "Mumbwa",
+    "province": "Central",
+    "is_urban": false
+  },
+  {
+    "code": "107008",
+    "name": "Mungwi",
+    "province": "Northern",
+    "is_urban": false
+  },
+  {
+    "code": "108011",
+    "name": "Mushindano",
+    "province": "North-Western",
+    "is_urban": false
+  },
+  {
+    "code": "110009",
+    "name": "Mwandi",
+    "province": "Western",
+    "is_urban": false
+  },
+  {
+    "code": "104008",
+    "name": "Mwansabombwe",
+    "province": "Luapula",
+    "is_urban": false
+  },
+  {
+    "code": "104009",
+    "name": "Mwense",
+    "province": "Luapula",
+    "is_urban": false
+  },
+  {
+    "code": "108007",
+    "name": "Mwinilunga",
+    "province": "North-Western",
+    "is_urban": false
+  },
+  {
+    "code": "106006",
+    "name": "Nakonde",
+    "province": "Muchinga",
+    "is_urban": false
+  },
+  {
+    "code": "110010",
+    "name": "Nalolo",
+    "province": "Western",
+    "is_urban": false
+  },
+  {
+    "code": "109009",
+    "name": "Namwala",
+    "province": "Southern",
+    "is_urban": false
+  },
+  {
+    "code": "104010",
+    "name": "Nchelenge",
+    "province": "Luapula",
+    "is_urban": false
+  },
+  {
+    "code": "102010",
+    "name": "Ndola",
+    "province": "Copperbelt",
+    "is_urban": true
+  },
+  {
+    "code": "101010",
+    "name": "Ngabwe",
+    "province": "Central",
+    "is_urban": false
+  },
+  {
+    "code": "110011",
+    "name": "Nkeyema",
+    "province": "Western",
+    "is_urban": false
+  },
+  {
+    "code": "107009",
+    "name": "Nsama",
+    "province": "Northern",
+    "is_urban": false
+  },
+  {
+    "code": "103006",
+    "name": "Nyimba",
+    "province": "Eastern",
+    "is_urban": false
+  },
+  {
+    "code": "109010",
+    "name": "Pemba",
+    "province": "Southern",
+    "is_urban": false
+  },
+  {
+    "code": "103007",
+    "name": "Petauke",
+    "province": "Eastern",
+    "is_urban": false
+  },
+  {
+    "code": "105007",
+    "name": "Rufunsa",
+    "province": "Lusaka",
+    "is_urban": false
+  },
+  {
+    "code": "104011",
+    "name": "Samfya",
+    "province": "Luapula",
+    "is_urban": false
+  },
+  {
+    "code": "110012",
+    "name": "Senanga",
+    "province": "Western",
+    "is_urban": false
+  },
+  {
+    "code": "107010",
+    "name": "Senga Hill",
+    "province": "Northern",
+    "is_urban": false
+  },
+  {
+    "code": "101011",
+    "name": "Serenje",
+    "province": "Central",
+    "is_urban": false
+  },
+  {
+    "code": "110013",
+    "name": "Sesheke",
+    "province": "Western",
+    "is_urban": false
+  },
+  {
+    "code": "110014",
+    "name": "Shangombo",
+    "province": "Western",
+    "is_urban": false
+  },
+  {
+    "code": "101012",
+    "name": "Shibuyunji",
+    "province": "Central",
+    "is_urban": false
+  },
+  {
+    "code": "106007",
+    "name": "Shiwang'Andu",
+    "province": "Muchinga",
+    "is_urban": false
+  },
+  {
+    "code": "109011",
+    "name": "Siavonga",
+    "province": "Southern",
+    "is_urban": false
+  },
+  {
+    "code": "110015",
+    "name": "Sikongo",
+    "province": "Western",
+    "is_urban": false
+  },
+  {
+    "code": "109012",
+    "name": "Sinazongwe",
+    "province": "Southern",
+    "is_urban": false
+  },
+  {
+    "code": "103008",
+    "name": "Sinda",
+    "province": "Eastern",
+    "is_urban": false
+  },
+  {
+    "code": "110016",
+    "name": "Sioma",
+    "province": "Western",
+    "is_urban": false
+  },
+  {
+    "code": "108008",
+    "name": "Solwezi",
+    "province": "North-Western",
+    "is_urban": false
+  },
+  {
+    "code": "103009",
+    "name": "Vubwi",
+    "province": "Eastern",
+    "is_urban": false
+  },
+  {
+    "code": "108009",
+    "name": "Zambezi",
+    "province": "North-Western",
+    "is_urban": false
+  },
+  {
+    "code": "109013",
+    "name": "Zimba",
+    "province": "Southern",
+    "is_urban": false
+  }
+]
